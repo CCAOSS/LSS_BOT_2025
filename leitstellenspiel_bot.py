@@ -4,6 +4,7 @@ import os
 import sys
 import threading
 import tkinter as tk
+import requests
 from tkinter import ttk
 from collections import Counter
 import traceback
@@ -102,6 +103,17 @@ class StatusWindow(tk.Tk):
 # -----------------------------------------------------------------------------------
 # BOT-HILFSFUNKTIONEN
 # -----------------------------------------------------------------------------------
+
+def send_discord_notification(message):
+    """Sendet eine Nachricht an den in der config.json definierten Discord Webhook."""
+    if "discord_webhook_url" in config and config["discord_webhook_url"]:
+        data = {"content": f"🚨 **LSS Bot Alert:**\n>>> {message}"}
+        try:
+            response = requests.post(config["discord_webhook_url"], json=data)
+            return response.status_code
+        except requests.exceptions.RequestException as e:
+            print(f"FEHLER: Konnte keine Discord-Benachrichtigung senden: {e}")
+    return None
 
 def setup_driver():
     """
@@ -441,11 +453,15 @@ def main_bot_logic(gui_vars):
                     time.sleep(3)
             except Exception: raise
     except Exception as e:
-        error_details = traceback.format_exc(); gui_vars['status'].set("FATALER FEHLER! Details in error_log.txt"); gui_vars['mission_name'].set("Bot angehalten.")
-        try:
-            with open(resource_path('error_log.txt'), 'a', encoding='utf-8') as f:
-                f.write(f"\n--- FEHLER am {time.strftime('%Y-%m-%d %H:%M:%S')} ---\n"); f.write(error_details); f.write("-" * 50 + "\n")
-        except Exception as log_e: gui_vars['status'].set(f"Konnte nicht in Log schreiben: {log_e}")
+            error_details = traceback.format_exc()
+            # NEU: Sende eine Notfall-Benachrichtigung
+            send_discord_notification(f"Ein fataler Fehler ist aufgetreten und der Bot wurde beendet!\n**Fehler:**\n```\n{error_details}\n```")
+            
+            gui_vars['status'].set("FATALER FEHLER! Details in error_log.txt"); gui_vars['mission_name'].set("Bot angehalten.")
+            try:
+                with open(resource_path('error_log.txt'), 'a', encoding='utf-8') as f:
+                    f.write(f"\n--- FEHLER am {time.strftime('%Y-%m-%d %H:%M:%S')} ---\n"); f.write(error_details); f.write("-" * 50 + "\n")
+            except Exception as log_e: gui_vars['status'].set(f"Konnte nicht in Log schreiben: {log_e}")
     finally:
         if driver: driver.quit()
         gui_vars['status'].set("Bot beendet.")
