@@ -1,39 +1,35 @@
 import subprocess
 import sys
-
-def run_command(command):
-    """Führt einen Shell-Befehl aus und gibt die Ausgabe zurück."""
-    result = subprocess.run(command, capture_output=True, text=True, check=False)
-    return result.stdout.strip()
+import os
 
 print("--- LSS Bot Launcher ---")
+print("1. Synchronisiere mit der neuesten Version von GitHub...")
 
-# 1. Prüfe den Remote-Status (ohne schon etwas herunterzuladen)
-print("1. Suche nach Updates auf GitHub...")
-run_command(["git", "remote", "update"])
+# Stelle sicher, dass wir im richtigen Verzeichnis sind
+script_dir = os.path.dirname(os.path.abspath(__file__))
+os.chdir(script_dir)
 
-# 2. Vergleiche die lokale Version mit der Online-Version
-local_version = run_command(["git", "rev-parse", "@"])
-remote_version = run_command(["git", "rev-parse", "@{u}"])
+try:
+    # --- NEU: Zuerst alle lokalen Änderungen verwerfen ---
+    # Das ist der entscheidende Schritt, um den "overwrite"-Fehler zu verhindern.
+    print("   -> Setze lokale Dateien zurück (git reset --hard)...")
+    subprocess.run(["git", "reset", "--hard", "HEAD"], check=True)
 
-# 3. Entscheide, ob ein Update nötig ist
-if local_version == remote_version:
-    print("-> Du hast bereits die aktuellste Version.")
-else:
-    print("-> Neue Version gefunden! Führe 'git pull' aus...")
-    # Führe das Update durch
-    pull_result = subprocess.run(["git", "pull"], check=True)
-    if pull_result.returncode == 0:
-        print("-> Update erfolgreich!")
-    else:
-        print("-> FEHLER beim Update. Starte trotzdem mit der alten Version.")
+    # --- Danach die neueste Version herunterladen ---
+    print("   -> Lade neueste Version herunter (git pull)...")
+    subprocess.run(["git", "pull"], check=True)
+    
+    print("-> Synchronisierung abgeschlossen. Du hast die aktuellste Version.")
+    
+except Exception as e:
+    print(f"-> FEHLER bei der Synchronisierung mit GitHub: {e}")
+    print("-> Starte trotzdem mit der zuletzt bekannten lokalen Version.")
 
-# 4. Starte den Haupt-Bot
+# Starte den Haupt-Bot
 print("\n2. Starte den Haupt-Bot (leitstellenspiel_bot.py)...")
 print("-" * 25)
 
 try:
-    # Führe das Hauptskript aus
     subprocess.run([sys.executable, "leitstellenspiel_bot.py"], check=True)
 except KeyboardInterrupt:
     print("\nLauncher durch Benutzer beendet.")
