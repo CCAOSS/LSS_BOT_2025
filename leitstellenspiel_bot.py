@@ -362,7 +362,8 @@ def main_bot_logic(gui_vars):
         time.sleep(1); driver.find_element(By.NAME, "commit").click()
         try:
             gui_vars['status'].set("Warte auf Hauptseite..."); wait.until(EC.presence_of_element_located((By.ID, "missions_outer"))); gui_vars['status'].set("Login erfolgreich! Bot aktiv.")
-            send_discord_notification("Bot wurde erfolgreich gestartet und ist jetzt aktiv.") # NEUE ZEILE
+            startup_text = "TEST '{}'."
+            send_discord_notification(f"Bot wurde erfolgreich gestartet und ist jetzt aktiv unter {LEITSTELLENSPIEL_USERNAME}.") # NEUE ZEILE
         except TimeoutException: raise Exception("Login fehlgeschlagen. Hauptseite nicht erreicht.")
         while True:
             if os.path.exists(stop_file_path): gui_vars['status'].set("Stoppe..."); os.remove(stop_file_path); break
