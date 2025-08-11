@@ -58,7 +58,7 @@ if not VEHICLE_DATABASE:
     print("Bot wird beendet, da die Fahrzeug-Datenbank nicht geladen werden konnte."); time.sleep(10); sys.exit()
 
 # --- Bot-Konfiguration ---
-BOT_VERSION = "V5.5 - Raspberry Version"
+BOT_VERSION = "V5.6 - Raspberry Version"
 PAUSE_IF_NO_VEHICLES_SECONDS = 300
 #CHROMEDRIVER_PATH = resource_path("chromedriver.exe")
 
@@ -362,6 +362,7 @@ def main_bot_logic(gui_vars):
         time.sleep(1); driver.find_element(By.NAME, "commit").click()
         try:
             gui_vars['status'].set("Warte auf Hauptseite..."); wait.until(EC.presence_of_element_located((By.ID, "missions_outer"))); gui_vars['status'].set("Login erfolgreich! Bot aktiv.")
+            send_discord_notification("Bot wurde erfolgreich gestartet und ist jetzt aktiv.") # NEUE ZEILE
         except TimeoutException: raise Exception("Login fehlgeschlagen. Hauptseite nicht erreicht.")
         while True:
             if os.path.exists(stop_file_path): gui_vars['status'].set("Stoppe..."); os.remove(stop_file_path); break
