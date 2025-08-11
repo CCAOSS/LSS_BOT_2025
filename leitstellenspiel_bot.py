@@ -57,9 +57,9 @@ if not VEHICLE_DATABASE:
     print("Bot wird beendet, da die Fahrzeug-Datenbank nicht geladen werden konnte."); time.sleep(10); sys.exit()
 
 # --- Bot-Konfiguration ---
-BOT_VERSION = "V5.3 - Final Build"
+BOT_VERSION = "V5.5 - Raspberry Version"
 PAUSE_IF_NO_VEHICLES_SECONDS = 300
-CHROMEDRIVER_PATH = resource_path("chromedriver.exe")
+#CHROMEDRIVER_PATH = resource_path("chromedriver.exe")
 
 # -----------------------------------------------------------------------------------
 # DIE KLASSE FÜR DAS STATUS-FENSTER
@@ -104,13 +104,49 @@ class StatusWindow(tk.Tk):
 # -----------------------------------------------------------------------------------
 
 def setup_driver():
+    """
+    Konfiguriert den WebDriver intelligent für das jeweilige Betriebssystem (Windows oder Linux).
+    """
     chrome_options = Options()
-    chrome_options.add_argument("--headless"); chrome_options.add_argument("--window-size=1920,1080")
-    user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
-    chrome_options.add_argument(f'user-agent={user_agent}'); chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"]); chrome_options.add_experimental_option('useAutomationExtension', False)
-    chrome_options.add_argument("--log-level=3"); chrome_options.add_argument("--disable-gpu")
-    service = ChromeService(executable_path=CHROMEDRIVER_PATH); driver = webdriver.Chrome(service=service, options=chrome_options)
-    driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"); return driver
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--window-size=1920,1080")
+    chrome_options.add_argument("--log-level=3")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--no-sandbox") # Wichtig für Linux, schadet unter Windows nicht
+
+    # --- NEU: Intelligente Betriebssystem-Erkennung ---
+    if sys.platform.startswith('linux'):
+        # --- Raspberry Pi (Linux) Konfiguration ---
+        print("Info: Linux-Betriebssystem (Raspberry Pi) erkannt.")
+        user_agent = "Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36"
+        # Der feste Pfad für den mit 'apt' installierten Treiber
+        chromedriver_path = "/usr/bin/chromedriver"
+        service = ChromeService(executable_path=chromedriver_path)
+        
+    elif sys.platform == "win32":
+        # --- Windows Konfiguration ---
+        print("Info: Windows-Betriebssystem erkannt.")
+        user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
+        # Der relative Pfad zur .exe-Datei im Projektordner
+        chromedriver_path = resource_path("chromedriver.exe")
+        service = ChromeService(executable_path=chromedriver_path)
+        
+    else:
+        # Ein Fallback, falls du es mal auf einem Mac probierst
+        print(f"Warnung: Unbekanntes Betriebssystem '{sys.platform}'. Versuche Standard-Initialisierung.")
+        service = ChromeService() 
+
+    # Gemeinsame Optionen für beide Systeme
+    chrome_options.add_argument(f'user-agent={user_agent}')
+    chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    chrome_options.add_experimental_option('useAutomationExtension', False)
+
+    # WebDriver mit den systemspezifischen Einstellungen starten
+    driver = webdriver.Chrome(service=service, options=chrome_options)
+    
+    driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+    
+    return driver
     
 def get_mission_requirements(driver, wait):
     """Liest die Rohdaten und ignoriert jetzt reine Wahrscheinlichkeits-Zeilen."""
