@@ -1,0 +1,11 @@
+# Konfigurationsdateien
+config.json
+
+# Log- und Cache-Dateien
+error_log.txt
+stop.txt
+__pycache__/
+*.pyc
+
+# Virtuelles Umfeld (falls im Projektordner)
+venv/
