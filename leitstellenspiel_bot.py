@@ -245,6 +245,7 @@ def find_best_vehicle_combination(requirements, available_vehicles):
         found_match = False
         for needed_type in needed_options:
             for vehicle in list(pool):
+                print(f" -> {vehicle} wird benötigt")
                 if needed_type in vehicle['properties'].get('typ', []):
                     vehicles_to_send.append(vehicle); pool.remove(vehicle); found_match = True; break
             if found_match: break
