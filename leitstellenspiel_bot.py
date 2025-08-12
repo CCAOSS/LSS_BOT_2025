@@ -118,7 +118,7 @@ def setup_driver():
     driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"); return driver
     
 def get_mission_requirements(driver, wait):
-    """Liest die Rohdaten und behandelt jetzt Wasser UND Schaummittel korrekt."""
+    """Liest die Rohdaten und erkennt jetzt alle Arten von Löschmittel-Bedarf."""
     raw_requirements = {'fahrzeuge': [], 'personal': 0, 'wasser': 0, 'schaummittel': 0}
     try:
         wait.until(EC.element_to_be_clickable((By.XPATH, "//a[contains(text(), 'Hilfe')]"))).click()
@@ -135,8 +135,8 @@ def get_mission_requirements(driver, wait):
                     print(f"    -> Info: Ignoriere Wahrscheinlichkeits-Zusatzinfo: '{requirement_text}'")
                     continue
                 
-                # KORREKTUR: Spezifische Prüfung für Schaummittel hinzugefügt
-                elif "schaummittel" in req_lower:
+                # KORREKTUR: Sucht jetzt nach beiden Begriffen
+                elif "schaummittel" in req_lower or "sonderlöschmittelbedarf" in req_lower:
                     if count_text.isdigit():
                         raw_requirements['schaummittel'] += int(count_text)
                         print(f"    -> Schaummittel-Bedarf gefunden: {count_text} Liter")
