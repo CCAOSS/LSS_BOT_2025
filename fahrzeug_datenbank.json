@@ -80,5 +80,9 @@
     "// -------------------- Wasserrettung --------------------": {},
     "GW-Taucher": { "personal": 2, "typ": ["Tauchkraftwagen"] },
     "GW-Wasserrettung": { "personal": 6, "typ": ["GW-Wasserrettung"] },
-    "MZB": { "personal": 0, "typ": ["Mehrzweckboot"] }
+    "MZB": { "personal": 0, "typ": ["Mehrzweckboot"] },
+
+     "// -------------------- Seenotrettung --------------------": {},
+    "Seenotrettungskreuzer": {"kennung": "100/", "personal": 0, "typ": ["Seenotrettungskreuzer"] },
+    "Seenotrettungsboot": { "kennung": "101/", "personal": 0, "typ": ["Seenotrettungsboot"] }
 }
