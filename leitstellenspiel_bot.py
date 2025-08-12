@@ -527,7 +527,7 @@ def main_bot_logic(gui_vars):
                     else:
                         gui_vars['availability'].set("Verfügbar: Keine"); gui_vars['status'].set(f"Keine Fahrzeuge frei. Pausiere..."); time.sleep(PAUSE_IF_NO_VEHICLES_SECONDS); break
                     
-                    checkboxes_to_click = find_best_vehicle_combination(final_requirements, available_vehicles, VEHICLE_DATABASE)
+                    checkboxes_to_click = find_best_vehicle_combination(final_requirements, available_vehicles)
                     if checkboxes_to_click:
                         dispatched_mission_ids.add(mission['id'])
                         gui_vars['status'].set("✓ Alarmiere..."); gui_vars['alarm_status'].set(f"Status: ALARMIERT ({len(checkboxes_to_click)} FZ)")
