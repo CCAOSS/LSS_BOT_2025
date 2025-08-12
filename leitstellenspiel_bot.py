@@ -178,7 +178,7 @@ def get_mission_requirements(driver, wait):
                 
                 elif "feuerlöschpumpe" in req_lower:
                     if count_text.isdigit():
-                        for _ in range(int(count_text)): raw_requirements['fahrzeuge'].append(["Löschfahrzeug", "Tanklöschfahrzeug"])
+                        for _ in range(int(count_text)): raw_requirements['fahrzeuge'].append(["Löschfahrzeuge", "Tanklöschfahrzeug"])
                 elif "personal" in req_lower or "feuerwehrleute" in req_lower:
                     if count_text.isdigit(): raw_requirements['personal'] += int(count_text)
                 elif "wasser" in req_lower or "wasserbedarf" in req_lower:
