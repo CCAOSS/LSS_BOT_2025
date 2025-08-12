@@ -183,12 +183,22 @@ def get_available_vehicles(driver, wait):
     return available_vehicles
 
 def find_best_vehicle_combination(requirements, available_vehicles):
-    """Berechnet die beste Fahrzeugkombination basierend auf den aufbereiteten Anforderungen."""
+    """
+    Berechnet die beste Fahrzeugkombination und berücksichtigt jetzt wieder
+    alle Bedarfe: Fahrzeugtypen, Personal, Patienten, Wasser und Schaummittel.
+    """
     needed_vehicle_options_list = requirements.get('fahrzeuge', [])
     needed_personal = requirements.get('personal', 0)
+    needed_wasser = requirements.get('wasser', 0)
+    needed_schaummittel = requirements.get('schaummittel', 0)
     needed_patienten = requirements.get('patienten', 0)
-    vehicles_to_send = []; pool = list(available_vehicles)
+    
+    print(f"Info: Ziel-Bedarf -> FZ-Anf: {len(needed_vehicle_options_list)}, Pers: {needed_personal}, Wasser: {needed_wasser}L, Schaum: {needed_schaummittel}L, Pat: {needed_patienten}")
 
+    vehicles_to_send = []
+    pool = list(available_vehicles)
+
+    # 1. Decke den spezifischen Fahrzeug-Typ-Bedarf
     for needed_options in needed_vehicle_options_list:
         found_match = False
         for needed_type in needed_options:
@@ -197,33 +207,53 @@ def find_best_vehicle_combination(requirements, available_vehicles):
                     vehicles_to_send.append(vehicle); pool.remove(vehicle); found_match = True; break
             if found_match: break
     
+    # 2. Berechne, was die bisher ausgewählten Fahrzeuge mitbringen
     provided_personal = sum(v['properties'].get('personal', 0) for v in vehicles_to_send)
+    provided_wasser = sum(v['properties'].get('wasser', 0) for v in vehicles_to_send)
+    provided_schaummittel = sum(v['properties'].get('schaummittel', 0) for v in vehicles_to_send)
     provided_patienten = sum(v['properties'].get('patienten_kapazitaet', 0) for v in vehicles_to_send)
     
-    if provided_personal < needed_personal:
-        pool.sort(key=lambda v: v['properties'].get('personal', 0), reverse=True)
-        for vehicle in list(pool):
-            if provided_personal >= needed_personal: break
-            vehicles_to_send.append(vehicle); pool.remove(vehicle); provided_personal += vehicle['properties'].get('personal', 0)
-            
-    # --- FINALE PRÜFUNG MIT DEBUG-AUSGABE ---
-    print("\n--- DEBUG: FINALE PRÜFUNG ---")
+    # 3. Defizit-Auffüllung (Hilfsfunktion)
+    def fill_deficit(resource_key, current_provided, needed, resource_name):
+        nonlocal pool, vehicles_to_send, provided_personal, provided_wasser, provided_schaummittel, provided_patienten
+        if current_provided < needed:
+            deficit = needed - current_provided
+            print(f"Info: {deficit} {resource_name} wird noch benötigt.")
+            pool.sort(key=lambda v: v['properties'].get(resource_key, 0), reverse=True)
+            for vehicle in list(pool):
+                if current_provided >= needed: break
+                props = vehicle['properties']
+                resource_val = props.get(resource_key, 0)
+                if resource_val > 0:
+                    vehicles_to_send.append(vehicle); pool.remove(vehicle)
+                    # Addiere ALLE Ressourcen des neuen Fahrzeugs zu den Gesamtwerten
+                    provided_personal += props.get('personal', 0)
+                    provided_wasser += props.get('wasser', 0)
+                    provided_schaummittel += props.get('schaummittel', 0)
+                    provided_patienten += props.get('patienten_kapazitaet', 0)
+                    current_provided += resource_val
+        return current_provided
+
+    # Wende die Defizit-Logik für alle Ressourcen an
+    provided_wasser = fill_deficit('wasser', provided_wasser, needed_wasser, 'Liter Wasser')
+    provided_schaummittel = fill_deficit('schaummittel', provided_schaummittel, needed_schaummittel, 'Liter Schaummittel')
+    provided_personal = fill_deficit('personal', provided_personal, needed_personal, 'Personal')
+    provided_patienten = fill_deficit('patienten_kapazitaet', provided_patienten, needed_patienten, 'Patienten-Transportplätze')
+
+    # 4. Finale Prüfung
     final_vehicle_counts = Counter(role for v in vehicles_to_send for role in v['properties'].get('typ', []))
     all_vehicles_met = all(final_vehicle_counts.get(option[0], 0) >= 1 for option in needed_vehicle_options_list)
-
-    print(f"Benötigte Fahrzeug-Anforderungen (Anzahl): {len(needed_vehicle_options_list)}")
-    print(f"Ausgewählte Fahrzeuge (Anzahl): {len(vehicles_to_send)}")
-    print(f"Benötigtes Personal: {needed_personal}, Bereitgestellt: {provided_personal}")
-    print(f"Benötigte Patientenplätze: {needed_patienten}, Bereitgestellt: {provided_patienten}")
-    print(f"-> Alle Fahrzeug-Typen erfüllt? {all_vehicles_met}")
-    print(f"-> Personal erfüllt? {provided_personal >= needed_personal}")
-    print(f"-> Patientenplätze erfüllt? {provided_patienten >= needed_patienten}")
-    print("-----------------------------\n")
-
-    if len(vehicles_to_send) >= len(needed_vehicle_options_list) and provided_personal >= needed_personal and provided_patienten >= needed_patienten:
+    
+    if all_vehicles_met and provided_personal >= needed_personal and provided_wasser >= needed_wasser and provided_schaummittel >= needed_schaummittel and provided_patienten >= needed_patienten:
+        print(f"Erfolgreiche Zuteilung gefunden! Sende {len(vehicles_to_send)} Fahrzeuge.")
         return [v['checkbox'] for v in vehicles_to_send]
     else:
         print("Keine passende Fahrzeugkombination gefunden.")
+        if not all_vehicles_met: print("-> Es fehlen benötigte Fahrzeugtypen.")
+        if provided_personal < needed_personal: print(f"-> Es fehlen {needed_personal - provided_personal} Personal.")
+        if provided_wasser < needed_wasser: print(f"-> Es fehlen {needed_wasser - provided_wasser} L Wasser.")
+        if provided_schaummittel < needed_schaummittel: print(f"-> Es fehlen {needed_schaummittel - provided_schaummittel} L Schaummittel.")
+        if provided_patienten < needed_patienten: print(f"-> Es fehlen {needed_patienten - provided_patienten} Patienten-Transportplätze.")
         return []
 
 def send_discord_notification(message):
