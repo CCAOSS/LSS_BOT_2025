@@ -57,7 +57,7 @@ if not VEHICLE_DATABASE:
     print("Bot wird beendet, da die Fahrzeug-Datenbank nicht geladen werden konnte."); time.sleep(10); sys.exit()
 
 # --- Bot-Konfiguration ---
-BOT_VERSION = "V6.1 - Final Complete"
+BOT_VERSION = "V6.1 - Final Logic"
 PAUSE_IF_NO_VEHICLES_SECONDS = 300
 
 # -----------------------------------------------------------------------------------
@@ -108,11 +108,9 @@ def setup_driver():
     chrome_options.add_argument("--headless"); chrome_options.add_argument("--window-size=1920,1080")
     chrome_options.add_argument("--log-level=3"); chrome_options.add_argument("--disable-gpu"); chrome_options.add_argument("--no-sandbox")
     if sys.platform.startswith('linux'):
-        print("Info: Linux-Betriebssystem (Raspberry Pi) erkannt.")
         user_agent = "Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36"
         service = ChromeService(executable_path="/usr/bin/chromedriver")
     else: # win32
-        print("Info: Windows-Betriebssystem erkannt.")
         user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
         service = ChromeService(executable_path=resource_path("chromedriver.exe"))
     chrome_options.add_argument(f'user-agent={user_agent}'); chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"]); chrome_options.add_experimental_option('useAutomationExtension', False)
@@ -152,8 +150,7 @@ def get_mission_requirements(driver, wait):
                             for _ in range(int(count_text)): raw_requirements['fahrzeuge'].append(options)
                         else:
                             for _ in range(int(count_text)): raw_requirements['fahrzeuge'].append([clean_text])
-    except TimeoutException:
-        print("Info: Keine Anforderungstabelle im Hilfe-Fenster gefunden.")
+    except TimeoutException: print("Info: Keine Anforderungstabelle im Hilfe-Fenster gefunden.")
     finally:
         try: wait.until(EC.element_to_be_clickable((By.XPATH, "//a[text()='Zurück']"))).click()
         except: driver.refresh()
@@ -181,8 +178,6 @@ def get_available_vehicles(driver, wait):
                         vehicle_properties = VEHICLE_DATABASE[standard_type_from_attr]; found_identifier = standard_type_from_attr
                 if vehicle_properties:
                     available_vehicles.append({'properties': vehicle_properties, 'checkbox': checkbox, 'name': full_vehicle_name})
-                else:
-                    print(f"    -> WARNUNG: Für '{full_vehicle_name}' konnte kein Typ zugeordnet werden.")
             except NoSuchElementException: continue
     except TimeoutException: print(f"FEHLER: Fahrzeug-Tabelle nicht gefunden.")
     return available_vehicles
@@ -193,6 +188,7 @@ def find_best_vehicle_combination(requirements, available_vehicles):
     needed_personal = requirements.get('personal', 0)
     needed_patienten = requirements.get('patienten', 0)
     vehicles_to_send = []; pool = list(available_vehicles)
+
     for needed_options in needed_vehicle_options_list:
         found_match = False
         for needed_type in needed_options:
@@ -200,13 +196,30 @@ def find_best_vehicle_combination(requirements, available_vehicles):
                 if needed_type in vehicle['properties'].get('typ', []):
                     vehicles_to_send.append(vehicle); pool.remove(vehicle); found_match = True; break
             if found_match: break
+    
     provided_personal = sum(v['properties'].get('personal', 0) for v in vehicles_to_send)
     provided_patienten = sum(v['properties'].get('patienten_kapazitaet', 0) for v in vehicles_to_send)
+    
     if provided_personal < needed_personal:
         pool.sort(key=lambda v: v['properties'].get('personal', 0), reverse=True)
         for vehicle in list(pool):
             if provided_personal >= needed_personal: break
             vehicles_to_send.append(vehicle); pool.remove(vehicle); provided_personal += vehicle['properties'].get('personal', 0)
+            
+    # --- FINALE PRÜFUNG MIT DEBUG-AUSGABE ---
+    print("\n--- DEBUG: FINALE PRÜFUNG ---")
+    final_vehicle_counts = Counter(role for v in vehicles_to_send for role in v['properties'].get('typ', []))
+    all_vehicles_met = all(final_vehicle_counts.get(option[0], 0) >= 1 for option in needed_vehicle_options_list)
+
+    print(f"Benötigte Fahrzeug-Anforderungen (Anzahl): {len(needed_vehicle_options_list)}")
+    print(f"Ausgewählte Fahrzeuge (Anzahl): {len(vehicles_to_send)}")
+    print(f"Benötigtes Personal: {needed_personal}, Bereitgestellt: {provided_personal}")
+    print(f"Benötigte Patientenplätze: {needed_patienten}, Bereitgestellt: {provided_patienten}")
+    print(f"-> Alle Fahrzeug-Typen erfüllt? {all_vehicles_met}")
+    print(f"-> Personal erfüllt? {provided_personal >= needed_personal}")
+    print(f"-> Patientenplätze erfüllt? {provided_patienten >= needed_patienten}")
+    print("-----------------------------\n")
+
     if len(vehicles_to_send) >= len(needed_vehicle_options_list) and provided_personal >= needed_personal and provided_patienten >= needed_patienten:
         return [v['checkbox'] for v in vehicles_to_send]
     else:
@@ -214,31 +227,24 @@ def find_best_vehicle_combination(requirements, available_vehicles):
         return []
 
 def send_discord_notification(message):
-    """Sendet eine Nachricht an den in der config.json definierten Discord Webhook."""
     if "discord_webhook_url" in config and config["discord_webhook_url"]:
         data = {"content": f"🚨 **LSS Bot Alert:**\n>>> {message}"}
-        try:
-            requests.post(config["discord_webhook_url"], json=data)
-        except requests.exceptions.RequestException as e:
-            print(f"FEHLER: Konnte keine Discord-Benachrichtigung senden: {e}")
+        try: requests.post(config["discord_webhook_url"], json=data)
+        except requests.exceptions.RequestException: print("FEHLER: Discord-Benachrichtigung senden fehlgeschlagen.")
 
 def check_and_claim_daily_bonus(driver, wait):
-    """Prüft auf die tägliche Belohnung und sucht optimiert direkt im iFrame."""
     try:
         bonus_icon = driver.find_element(By.XPATH, "//span[contains(@class, 'glyphicon-calendar') and contains(@class, 'bonus-active')]")
         bonus_icon.click(); time.sleep(2)
         wait.until(EC.frame_to_be_available_and_switch_to_it((By.TAG_NAME, "iframe")))
         claim_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "div.collect-possible-block button.collect-button")))
         claim_button.click(); time.sleep(3)
-        print("Info: Tägliche Belohnung abgeholt.")
     except (NoSuchElementException, TimeoutException): pass
-    except Exception as e: print(f"FEHLER beim Abholen der Belohnung: {e}")
     finally:
         try: driver.switch_to.default_content()
         except: pass
 
 def check_and_claim_tasks(driver, wait):
-    """Prüft auf erledigte Aufgaben und klickt nur die wirklich aktiven 'Abholen'-Buttons."""
     try:
         profile_dropdown = wait.until(EC.element_to_be_clickable((By.ID, "menu_profile"))); profile_dropdown.click()
         short_wait = WebDriverWait(driver, 3)
@@ -251,13 +257,11 @@ def check_and_claim_tasks(driver, wait):
     except TimeoutException:
         try: driver.find_element(By.TAG_NAME, 'body').click(); time.sleep(1)
         except: pass
-    except Exception as e: print(f"FEHLER beim Prüfen der Aufgaben: {e}")
     finally:
         try: driver.switch_to.default_content()
         except: pass
 
 def handle_sprechwunsche(driver, wait):
-    """Sucht nach Sprechwünschen und bearbeitet diese."""
     try:
         sprechwunsch_list = driver.find_element(By.ID, "radio_messages_important")
         messages = sprechwunsch_list.find_elements(By.XPATH, "./li")
@@ -269,7 +273,6 @@ def handle_sprechwunsche(driver, wait):
                     vehicle_urls_to_process.append({'url': vehicle_link.get_attribute('href'), 'name': vehicle_link.text.strip()})
                 except NoSuchElementException: continue
         if not vehicle_urls_to_process: return
-        print(f"Info: {len(vehicle_urls_to_process)} Sprechwünsche gefunden. Bearbeite...")
         for vehicle_info in vehicle_urls_to_process:
             driver.get(vehicle_info['url'])
             try:
@@ -304,11 +307,10 @@ def main_bot_logic(gui_vars):
             gui_vars['status'].set("Lade Hauptseite & prüfe Status..."); driver.get("https://www.leitstellenspiel.de/"); wait.until(EC.presence_of_element_located((By.ID, "missions_outer")))
             today = date.today();
             if last_check_date != today: bonus_checked_today = False; last_check_date = today
-            if not bonus_checked_today: check_and_claim_daily_bonus(driver, wait); bonus_checked_today = True
-            
+            if not bonus_checked_today:
+                check_and_claim_daily_bonus(driver, wait); bonus_checked_today = True
             check_and_claim_tasks(driver, wait)
             handle_sprechwunsche(driver, wait)
-            
             try:
                 gui_vars['status'].set("Prüfe Einsätze..."); mission_list_container = driver.find_element(By.ID, "missions_outer")
                 mission_entries = mission_list_container.find_elements(By.XPATH, ".//div[contains(@class, 'missionSideBarEntry')]")
@@ -333,10 +335,10 @@ def main_bot_logic(gui_vars):
                     raw_requirements = get_mission_requirements(driver, wait)
                     if not raw_requirements: continue
                     
+                    # Logik zur Aufbereitung der Anforderungen
                     final_requirements = {'fahrzeuge': [], 'personal': raw_requirements['personal'], 'patienten': mission['patienten']}
                     translation_map = {"Rettungswagen": "RTW", "Löschfahrzeuge": "Löschfahrzeug", "Drehleitern": "Drehleiter"}
                     for req_options in raw_requirements['fahrzeuge']:
-                        # Da req_options eine Liste ist, müssen wir durch sie iterieren
                         processed_options = []
                         for req_text in req_options:
                             clean_text = req_text.replace("Benötigte ", "").strip(); translated = False
@@ -345,9 +347,11 @@ def main_bot_logic(gui_vars):
                             if not translated: processed_options.append(clean_text)
                         final_requirements['fahrzeuge'].append(processed_options)
                     
-                    req_parts = []; readable_requirements = [" oder ".join(options) for options in final_requirements['fahrzeuge']]
+                    # GUI-Anzeige (behebt den "R T W"-Bug)
+                    req_parts = []
+                    readable_requirements = [" oder ".join(options) for options in final_requirements['fahrzeuge']]
                     vehicle_counts = Counter(readable_requirements)
-                    for vehicle, count in vehicle_counts.items(): req_parts.append(f"{count}x {vehicle}")
+                    for vehicle_group, count in vehicle_counts.items(): req_parts.append(f"{count}x {vehicle_group}")
                     if final_requirements['personal'] > 0: req_parts.append(f"{final_requirements['personal']} Personal")
                     if final_requirements['patienten'] > 0: req_parts.append(f"{final_requirements['patienten']} Patienten")
                     gui_vars['requirements'].set("Bedarf: " + (", ".join(req_parts) if req_parts else "-"))
@@ -365,28 +369,15 @@ def main_bot_logic(gui_vars):
                     checkboxes_to_click = find_best_vehicle_combination(final_requirements, available_vehicles)
                     if checkboxes_to_click:
                         dispatched_mission_ids.add(mission['id'])
-                        gui_vars['status'].set("✓ Alarmiere...")
-                        gui_vars['alarm_status'].set(f"Status: ALARMIERT ({len(checkboxes_to_click)} FZ)")
-                        
-                        # Verwende den JavaScript-Trick für jede Checkbox
-                        for checkbox in checkboxes_to_click:
-                            driver.execute_script("arguments[0].click();", checkbox)
-                        
-                        try: 
-                            alarm_button = driver.find_element(By.XPATH, "//input[@value='Alarmieren und zum nächsten Einsatz']")
-                            driver.execute_script("arguments[0].click();", alarm_button)
-                        except NoSuchElementException: 
-                            alarm_button = driver.find_element(By.XPATH, "//input[@value='Alarmieren']")
-                            driver.execute_script("arguments[0].click();", alarm_button)
-                    
-                    # HIER IST DIE KORREKTUR:
-                    # Das 'else' ist jetzt korrekt auf derselben Ebene wie das 'if' darüber.
+                        gui_vars['status'].set("✓ Alarmiere..."); gui_vars['alarm_status'].set(f"Status: ALARMIERT ({len(checkboxes_to_click)} FZ)")
+                        for checkbox in checkboxes_to_click: driver.execute_script("arguments[0].click();", checkbox)
+                        try:
+                            alarm_button = driver.find_element(By.XPATH, "//input[@value='Alarmieren und zum nächsten Einsatz']"); driver.execute_script("arguments[0].click();", alarm_button)
+                        except NoSuchElementException:
+                            alarm_button = driver.find_element(By.XPATH, "//input[@value='Alarmieren']"); driver.execute_script("arguments[0].click();", alarm_button)
                     else:
-                        gui_vars['status'].set("❌ Nicht genug Einheiten frei.")
-                        gui_vars['alarm_status'].set("Status: WARTE AUF EINHEITEN")
-
-                    time.sleep(3) # Diese Pause wird nach beiden Fällen ausgeführt
-                    
+                        gui_vars['status'].set("❌ Nicht genug Einheiten frei."); gui_vars['alarm_status'].set("Status: WARTE AUF EINHEITEN")
+                    time.sleep(3)
             except Exception: raise
     except Exception as e:
         error_details = traceback.format_exc(); send_discord_notification(f"FATALER FEHLER! Bot beendet.\n```\n{error_details}\n```")
