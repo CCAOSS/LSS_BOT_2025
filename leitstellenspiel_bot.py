@@ -118,7 +118,7 @@ def setup_driver():
     driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"); return driver
     
 def get_mission_requirements(driver, wait):
-    """Liest die Rohdaten aus dem Hilfe-Fenster und behandelt Sonderfälle."""
+    """Liest die Rohdaten und behandelt jetzt Wasser UND Schaummittel korrekt."""
     raw_requirements = {'fahrzeuge': [], 'personal': 0, 'wasser': 0, 'schaummittel': 0}
     try:
         wait.until(EC.element_to_be_clickable((By.XPATH, "//a[contains(text(), 'Hilfe')]"))).click()
@@ -130,9 +130,17 @@ def get_mission_requirements(driver, wait):
             if len(cells) >= 2:
                 requirement_text, count_text = cells[0].text.strip(), cells[1].text.strip().replace(" L", "")
                 req_lower = requirement_text.lower()
+
                 if "anforderungswahrscheinlichkeit" in req_lower:
                     print(f"    -> Info: Ignoriere Wahrscheinlichkeits-Zusatzinfo: '{requirement_text}'")
                     continue
+                
+                # KORREKTUR: Spezifische Prüfung für Schaummittel hinzugefügt
+                elif "schaummittel" in req_lower:
+                    if count_text.isdigit():
+                        raw_requirements['schaummittel'] += int(count_text)
+                        print(f"    -> Schaummittel-Bedarf gefunden: {count_text} Liter")
+                
                 elif "feuerlöschpumpe" in req_lower:
                     if count_text.isdigit():
                         for _ in range(int(count_text)): raw_requirements['fahrzeuge'].append(["Löschfahrzeug", "Tanklöschfahrzeug"])
@@ -140,8 +148,6 @@ def get_mission_requirements(driver, wait):
                     if count_text.isdigit(): raw_requirements['personal'] += int(count_text)
                 elif "wasser" in req_lower or "wasserbedarf" in req_lower:
                     if count_text.isdigit(): raw_requirements['wasser'] += int(count_text)
-                elif "schaummittel" in req_lower:
-                    if count_text.isdigit(): raw_requirements['schaummittel'] += int(count_text)
                 else:
                     if count_text.isdigit():
                         clean_text = requirement_text.replace("Benötigte ", "").strip()
@@ -150,7 +156,8 @@ def get_mission_requirements(driver, wait):
                             for _ in range(int(count_text)): raw_requirements['fahrzeuge'].append(options)
                         else:
                             for _ in range(int(count_text)): raw_requirements['fahrzeuge'].append([clean_text])
-    except TimeoutException: print("Info: Keine Anforderungstabelle im Hilfe-Fenster gefunden.")
+    except TimeoutException:
+        print("Info: Keine Anforderungstabelle im Hilfe-Fenster gefunden.")
     finally:
         try: wait.until(EC.element_to_be_clickable((By.XPATH, "//a[text()='Zurück']"))).click()
         except: driver.refresh()
@@ -249,11 +256,11 @@ def find_best_vehicle_combination(requirements, available_vehicles):
         return [v['checkbox'] for v in vehicles_to_send]
     else:
         print("Keine passende Fahrzeugkombination gefunden.")
-        if not all_vehicles_met: print("-> Es fehlen benötigte Fahrzeugtypen.")
         if provided_personal < needed_personal: print(f"-> Es fehlen {needed_personal - provided_personal} Personal.")
         if provided_wasser < needed_wasser: print(f"-> Es fehlen {needed_wasser - provided_wasser} L Wasser.")
         if provided_schaummittel < needed_schaummittel: print(f"-> Es fehlen {needed_schaummittel - provided_schaummittel} L Schaummittel.")
         if provided_patienten < needed_patienten: print(f"-> Es fehlen {needed_patienten - provided_patienten} Patienten-Transportplätze.")
+        if not all_vehicles_met: print("-> Es fehlen benötigte Fahrzeugtypen.")
         return []
 
 def send_discord_notification(message):
