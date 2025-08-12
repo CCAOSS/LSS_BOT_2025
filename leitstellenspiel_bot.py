@@ -364,22 +364,29 @@ def main_bot_logic(gui_vars):
                     
                     checkboxes_to_click = find_best_vehicle_combination(final_requirements, available_vehicles)
                     if checkboxes_to_click:
-                            dispatched_mission_ids.add(mission['id'])
-                            gui_vars['status'].set("✓ Alarmiere..."); gui_vars['alarm_status'].set(f"Status: ALARMIERT ({len(checkboxes_to_click)} FZ)")
-                            
-                            # NEU: Verwende den JavaScript-Trick für jede Checkbox
-                            for checkbox in checkboxes_to_click:
-                                driver.execute_script("arguments[0].click();", checkbox)
-                            
-                            try: 
-                                alarm_button = driver.find_element(By.XPATH, "//input[@value='Alarmieren und zum nächsten Einsatz']")
-                                driver.execute_script("arguments[0].click();", alarm_button)
-                            except NoSuchElementException: 
-                                alarm_button = driver.find_element(By.XPATH, "//input[@value='Alarmieren']")
-                                driver.execute_script("arguments[0].click();", alarm_button)
+                        dispatched_mission_ids.add(mission['id'])
+                        gui_vars['status'].set("✓ Alarmiere...")
+                        gui_vars['alarm_status'].set(f"Status: ALARMIERT ({len(checkboxes_to_click)} FZ)")
+                        
+                        # Verwende den JavaScript-Trick für jede Checkbox
+                        for checkbox in checkboxes_to_click:
+                            driver.execute_script("arguments[0].click();", checkbox)
+                        
+                        try: 
+                            alarm_button = driver.find_element(By.XPATH, "//input[@value='Alarmieren und zum nächsten Einsatz']")
+                            driver.execute_script("arguments[0].click();", alarm_button)
+                        except NoSuchElementException: 
+                            alarm_button = driver.find_element(By.XPATH, "//input[@value='Alarmieren']")
+                            driver.execute_script("arguments[0].click();", alarm_button)
+                    
+                    # HIER IST DIE KORREKTUR:
+                    # Das 'else' ist jetzt korrekt auf derselben Ebene wie das 'if' darüber.
                     else:
-                         gui_vars['status'].set("❌ Nicht genug Einheiten frei."); gui_vars['alarm_status'].set("Status: WARTE AUF EINHEITEN")
-                    time.sleep(3)
+                        gui_vars['status'].set("❌ Nicht genug Einheiten frei.")
+                        gui_vars['alarm_status'].set("Status: WARTE AUF EINHEITEN")
+
+                    time.sleep(3) # Diese Pause wird nach beiden Fällen ausgeführt
+                    
             except Exception: raise
     except Exception as e:
         error_details = traceback.format_exc(); send_discord_notification(f"FATALER FEHLER! Bot beendet.\n```\n{error_details}\n```")
