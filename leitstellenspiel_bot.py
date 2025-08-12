@@ -61,12 +61,17 @@ BOT_VERSION = "V6.1 - Final Logic"
 PAUSE_IF_NO_VEHICLES_SECONDS = 300
 
 # -----------------------------------------------------------------------------------
-# DIE KLASSE FÜR DAS STATUS-FENSTER
+# DIE KLASSE FÜR DAS STATUS-FENSTER (Version mit Pause/Stop-Logik)
 # -----------------------------------------------------------------------------------
 
 class StatusWindow(tk.Tk):
-    def __init__(self):
+    def __init__(self, pause_event, stop_event):
         super().__init__()
+        
+        # Übernehme die Signale von außen
+        self.pause_event = pause_event
+        self.stop_event = stop_event
+        
         self.title(f"LSS Bot {BOT_VERSION} | User: {LEITSTELLENSPIEL_USERNAME}")
         self.geometry("450x300"); self.minsize(450, 300)
         self.configure(bg="#2E2E2E")
@@ -74,11 +79,15 @@ class StatusWindow(tk.Tk):
         style.configure("TLabel", background="#2E2E2E", foreground="#FFFFFF", font=("Segoe UI", 10))
         style.configure("Header.TLabel", font=("Segoe UI", 12, "bold"))
         style.configure("TButton", font=("Segoe UI", 10))
+        style.configure("TFrame", background="#2E2E2E") # Style für den Button-Frame
+        
         self.status_var = tk.StringVar(value="Bot startet...")
         self.mission_name_var = tk.StringVar(value="Warte auf ersten Einsatz...")
         self.requirements_var = tk.StringVar(value="-")
         self.availability_var = tk.StringVar(value="-")
         self.alarm_status_var = tk.StringVar(value="-")
+        
+        # GUI-Elemente (Labels)
         ttk.Label(self, text="Bot Status:", style="Header.TLabel").pack(pady=(10, 0), anchor="w", padx=10)
         ttk.Label(self, textvariable=self.status_var).pack(anchor="w", padx=20)
         ttk.Label(self, text="Aktueller Einsatz:", style="Header.TLabel").pack(pady=(10, 0), anchor="w", padx=10)
@@ -89,14 +98,40 @@ class StatusWindow(tk.Tk):
         ttk.Label(self, textvariable=self.availability_var).pack(anchor="w", padx=20)
         ttk.Label(self, text="Alarmierungsstatus:", style="Header.TLabel").pack(pady=(10, 0), anchor="w", padx=10)
         ttk.Label(self, textvariable=self.alarm_status_var).pack(anchor="w", padx=20)
-        ttk.Button(self, text="Bot Stoppen", command=self.stop_bot).pack(side="bottom", pady=10)
+
+        # Frame für die Buttons am unteren Rand
+        button_frame = ttk.Frame(self, style="TFrame")
+        button_frame.pack(side="bottom", pady=10, fill="x", padx=10)
+
+        self.pause_button = ttk.Button(button_frame, text="Pause", command=self.toggle_pause)
+        self.pause_button.pack(side="left", expand=True, padx=5)
+        
+        stop_button = ttk.Button(button_frame, text="Bot Stoppen & Schließen", command=self.stop_bot)
+        stop_button.pack(side="right", expand=True, padx=5)
+
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
+
+    def toggle_pause(self):
+        """Pausiert oder setzt den Bot-Thread fort."""
+        if self.pause_event.is_set():
+            self.pause_event.clear()
+            self.pause_button.config(text="Continue")
+            self.status_var.set("Bot pausiert.")
+        else:
+            self.pause_event.set()
+            self.pause_button.config(text="Pause")
+            self.status_var.set("Bot wird fortgesetzt...")
+            
     def stop_bot(self):
+        """Setzt das Stop-Signal und schließt das Fenster."""
+        print("Info: Stop-Signal gesetzt. Beende den Bot-Thread...")
         self.status_var.set("Beende Bot...")
-        with open(resource_path('stop.txt'), 'w') as f: f.write('stop')
+        self.stop_event.set()
+        self.after(500, self.destroy)
+
     def on_closing(self):
+        """Wird ausgeführt, wenn das Fenster-X geklickt wird."""
         self.stop_bot()
-        self.destroy()
 
 # -----------------------------------------------------------------------------------
 # BOT-HILFSFUNKTIONEN
@@ -389,8 +424,10 @@ def main_bot_logic(gui_vars):
             send_discord_notification(f"Bot wurde erfolgreich gestartet auf Account: **{LEITSTELLENSPIEL_USERNAME}**")
         except TimeoutException: raise Exception("Login fehlgeschlagen.")
         while True:
-            if os.path.exists(stop_file_path): gui_vars['status'].set("Stoppe..."); os.remove(stop_file_path); break
-            
+            if gui_vars['stop_event'].is_set():
+                print("Info: Stop-Signal empfangen. Beende Schleife.")
+                break # Verlässt die while-Schleife sauber
+
             gui_vars['status'].set("Lade Hauptseite & prüfe Status..."); driver.get("https://www.leitstellenspiel.de/"); wait.until(EC.presence_of_element_located((By.ID, "missions_outer")))
             today = date.today();
             if last_check_date != today: bonus_checked_today = False; last_check_date = today
@@ -416,7 +453,13 @@ def main_bot_logic(gui_vars):
                     gui_vars['status'].set(f"Keine Einsätze. Warte {30}s..."); time.sleep(30); continue
                 gui_vars['status'].set(f"{len(mission_data)} Einsätze gefunden. Bearbeite...")
                 for i, mission in enumerate(mission_data):
-                    if os.path.exists(stop_file_path): break
+                    
+                    if not gui_vars['pause_event'].is_set():
+                        gui_vars['status'].set("Bot pausiert. Warte auf 'Continue'...")
+                        gui_vars['pause_event'].wait() # Hält den Thread hier an
+                        gui_vars['status'].set("Bot wird fortgesetzt...")
+                    
+                    if gui_vars['stop_event'].is_set(): break
                     if "[Verband]" in mission['name'] or mission['id'] in dispatched_mission_ids: continue
                     gui_vars['mission_name'].set(f"({i+1}/{len(mission_data)}) {mission['name']}"); driver.get(mission['url'])
                     raw_requirements = get_mission_requirements(driver, wait)
@@ -487,8 +530,28 @@ def main_bot_logic(gui_vars):
 # HAUPTPROGRAMM
 # -----------------------------------------------------------------------------------
 if __name__ == "__main__":
-    app = StatusWindow()
-    gui_variables = { "status": app.status_var, "mission_name": app.mission_name_var, "requirements": app.requirements_var, "availability": app.availability_var, "alarm_status": app.alarm_status_var }
+    # Erstelle die zentralen Signale
+    pause_event = threading.Event()
+    pause_event.set() # Starte den Bot im laufenden Zustand
+    stop_event = threading.Event()
+
+    # Erstelle das GUI-Fenster und übergib die Signale
+    app = StatusWindow(pause_event, stop_event)
+    
+    # Erstelle das Dictionary, um die GUI-Variablen UND Signale an den Bot zu übergeben
+    gui_variables = { 
+        "status": app.status_var, 
+        "mission_name": app.mission_name_var, 
+        "requirements": app.requirements_var, 
+        "availability": app.availability_var, 
+        "alarm_status": app.alarm_status_var,
+        "pause_event": pause_event,
+        "stop_event": stop_event
+    }
+    
+    # Erstelle und starte den Bot in einem separaten Thread
     bot_thread = threading.Thread(target=main_bot_logic, args=(gui_variables,), daemon=True)
     bot_thread.start()
+
+    # Starte die GUI-Hauptschleife
     app.mainloop()
