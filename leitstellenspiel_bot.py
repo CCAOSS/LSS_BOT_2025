@@ -423,7 +423,13 @@ def main_bot_logic(gui_vars):
                     if not raw_requirements: continue
                     
                     # Logik zur Aufbereitung der Anforderungen
-                    final_requirements = {'fahrzeuge': [], 'personal': raw_requirements['personal'], 'patienten': mission['patienten']}
+                    final_requirements = {
+                        'fahrzeuge': [], 
+                        'personal': raw_requirements['personal'], 
+                        'wasser': raw_requirements['wasser'], 
+                        'schaummittel': raw_requirements['schaummittel'], 
+                        'patienten': mission['patienten']
+                    }
                     translation_map = {"Rettungswagen": "RTW", "Löschfahrzeuge": "Löschfahrzeug", "Drehleitern": "Drehleiter"}
                     for req_options in raw_requirements['fahrzeuge']:
                         processed_options = []
