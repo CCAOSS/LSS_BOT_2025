@@ -240,71 +240,55 @@ def get_available_vehicles(driver, wait):
 
 def find_best_vehicle_combination(requirements, available_vehicles, vehicle_data):
     """
-    Findet die beste Kombination und greift jetzt auf die korrekte 'properties'-Struktur zu.
+    Findet die beste Kombination und kann jetzt mit der "Liste von Listen"-Struktur umgehen.
     """
-    # Wandle Patientenbedarf direkt in Fahrzeugbedarf um
-    if requirements.get('patienten', 0) > 0:
-        for _ in range(requirements['patienten']):
-            requirements['fahrzeuge'].append("RTW")
-
-    needed_vehicle_roles = Counter(requirements.get('fahrzeuge', []))
+    # KORREKTUR: Zähle nicht die Liste der Listen, sondern verarbeite sie direkt.
+    needed_vehicle_options_list = requirements.get('fahrzeuge', [])
     needed_personal = requirements.get('personal', 0)
-    needed_wasser = requirements.get('wasser', 0)
-    needed_schaummittel = requirements.get('schaummittel', 0)
     needed_patienten = requirements.get('patienten', 0)
     
-    vehicles_to_send = []; pool = list(available_vehicles)
+    vehicles_to_send = []
+    pool = list(available_vehicles)
 
-    # 1. Decke den spezifischen Fahrzeug-Typ-Bedarf
-    for needed_role, needed_count in needed_vehicle_roles.items():
-        found_count = 0
+    # Decke den Fahrzeug-Typ-Bedarf, indem du die Liste der Listen durchgehst
+    for needed_options in needed_vehicle_options_list:
+        found_match = False
+        # Gehe die Optionen für diese Anforderung durch (z.B. zuerst 'Löschfahrzeug', dann 'Rüstwagen')
+        for needed_type in needed_options:
+            for vehicle in list(pool):
+                vehicle_properties = vehicle_data.get(vehicle['type'])
+                if vehicle_properties and needed_type in vehicle_properties.get('typ', []):
+                    vehicles_to_send.append(vehicle)
+                    pool.remove(vehicle)
+                    found_match = True
+                    break  # Fahrzeug für diese Option gefunden, suche nicht weiter im Pool
+            if found_match:
+                break # Anforderung erfüllt, gehe zur nächsten Anforderung in der Liste
+
+    # Ressourcen- und Personalprüfung
+    provided_personal = sum(vehicle_data.get(v['type'], {}).get('personal', 0) for v in vehicles_to_send)
+    provided_patienten = sum(vehicle_data.get(v['type'], {}).get('patienten_kapazitaet', 0) for v in vehicles_to_send)
+
+    # Fülle Personaldefizit auf
+    if provided_personal < needed_personal:
+        pool.sort(key=lambda v: vehicle_data.get(v['type'], {}).get('personal', 0), reverse=True)
         for vehicle in list(pool):
-            if found_count >= needed_count: break
+            if provided_personal >= needed_personal: break
+            vehicles_to_send.append(vehicle)
+            pool.remove(vehicle)
+            provided_personal += vehicle_data.get(vehicle['type'], {}).get('personal', 0)
             
-            # KORREKTUR: Greife direkt auf die 'properties' des Fahrzeugs zu.
-            if needed_role in vehicle['properties'].get('typ', []):
-                vehicles_to_send.append(vehicle); pool.remove(vehicle); found_count += 1
-    
-    # 2. Berechne, was die bisher ausgewählten Fahrzeuge mitbringen
-    provided_personal = sum(v['properties'].get('personal', 0) for v in vehicles_to_send)
-    provided_wasser = sum(v['properties'].get('wasser', 0) for v in vehicles_to_send)
-    provided_schaummittel = sum(v['properties'].get('schaummittel', 0) for v in vehicles_to_send)
-    provided_patienten = sum(v['properties'].get('patienten_kapazitaet', 0) for v in vehicles_to_send)
-    
-    # 3. Defizit-Auffüllung
-    def fill_deficit(pool_ref, vehicles_to_send_ref, current_provided, needed, resource_key, resource_name):
-        nonlocal provided_personal, provided_wasser, provided_schaummittel, provided_patienten
-        if current_provided < needed:
-            deficit = needed - current_provided
-            print(f"Info: {deficit} {resource_name} wird noch benötigt.")
-            # KORREKTUR: Greife auch hier auf 'properties' zu
-            pool_ref.sort(key=lambda v: v['properties'].get(resource_key, 0), reverse=True)
-            for vehicle in list(pool_ref):
-                if current_provided >= needed: break
-                props = vehicle['properties']
-                resource_val = props.get(resource_key, 0)
-                if resource_val > 0:
-                    vehicles_to_send_ref.append(vehicle); pool_ref.remove(vehicle)
-                    provided_personal += props.get('personal', 0)
-                    provided_wasser += props.get('wasser', 0)
-                    provided_schaummittel += props.get('schaummittel', 0)
-                    provided_patienten += props.get('patienten_kapazitaet', 0)
-                    current_provided += resource_val
-        return current_provided
-
-    provided_wasser = fill_deficit(pool, vehicles_to_send, provided_wasser, needed_wasser, 'wasser', 'Liter Wasser')
-    provided_schaummittel = fill_deficit(pool, vehicles_to_send, provided_schaummittel, needed_schaummittel, 'schaummittel', 'Liter Schaummittel')
-    provided_personal = fill_deficit(pool, vehicles_to_send, provided_personal, needed_personal, 'personal', 'Personal')
-
-    # 4. Finale Prüfung
-    final_vehicle_counts = Counter(role for v in vehicles_to_send for role in v['properties'].get('typ', []))
-    all_vehicles_met = all(final_vehicle_counts.get(role, 0) >= count for role, count in needed_vehicle_roles.items())
-
-    if all_vehicles_met and provided_personal >= needed_personal and provided_wasser >= needed_wasser and provided_schaummittel >= needed_schaummittel and provided_patienten >= needed_patienten:
+    # Finale Prüfung
+    # Wir müssen prüfen, ob die Anzahl der gesendeten Fahrzeuge der Anzahl der ursprünglichen Anforderungen entspricht
+    if len(vehicles_to_send) >= len(needed_vehicle_options_list) and provided_personal >= needed_personal and provided_patienten >= needed_patienten:
+        print(f"Erfolgreiche Zuteilung gefunden! Sende {len(vehicles_to_send)} Fahrzeuge.")
         return [v['checkbox'] for v in vehicles_to_send]
     else:
         print("Keine passende Fahrzeugkombination gefunden.")
-        # ... (Fehlerausgabe)
+        # Detaillierte Fehlerausgabe
+        if len(vehicles_to_send) < len(needed_vehicle_options_list): print("-> Es fehlen benötigte Fahrzeugtypen.")
+        if provided_personal < needed_personal: print(f"-> Es fehlen {needed_personal - provided_personal} Personal.")
+        if provided_patienten < needed_patienten: print(f"-> Es fehlen {needed_patienten - provided_patienten} Patienten-Transportplätze.")
         return []
 
 def check_and_claim_daily_bonus(driver, wait):
