@@ -40,7 +40,7 @@
     "GW-Lüfter": { "kennung": "lüfter/59/", "personal": 2, "typ": ["Lüfter"] },
     "GW-Öl": { "kennung": "51/", "personal": 2, "typ": ["GW-Öl"] },
     "GW-Höhenrettung": { "kennung": "59/", "personal": 9, "typ": ["GW-Höhenrettung"] },
-    "GW-A": { "kennung": "53/", "personal": 3, "typ": ["GW-Atemschutz"] },
+    "GW-A": { "kennung": "53/", "personal": 3, "typ": ["GW-A"] },
     "GW-L2": {"kennung": "58/", "personal": 3, "typ": ["GW-L2"] },
     "GW-L2-Wasser": { "kennung": "56/", "personal": 2, "typ": ["Schlauchwagen"] },
     "SW-KatS": {"kennung": "58/", "personal": 3, "typ": ["Schlauchwagen"]},

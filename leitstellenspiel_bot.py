@@ -384,7 +384,10 @@ def check_and_claim_tasks(driver, wait):
             pass
 
 def handle_sprechwunsche(driver, wait):
+    """Sucht nach Sprechwünschen, bearbeitet sie und kehrt danach zur Hauptseite zurück."""
+    navigated_away = False
     try:
+        print("Info: Prüfe auf Sprechwünsche...")
         sprechwunsch_list = driver.find_element(By.ID, "radio_messages_important")
         messages = sprechwunsch_list.find_elements(By.XPATH, "./li")
         vehicle_urls_to_process = []
@@ -394,15 +397,28 @@ def handle_sprechwunsche(driver, wait):
                     vehicle_link = message.find_element(By.XPATH, ".//a[contains(@href, '/vehicles/')]")
                     vehicle_urls_to_process.append({'url': vehicle_link.get_attribute('href'), 'name': vehicle_link.text.strip()})
                 except NoSuchElementException: continue
-        if not vehicle_urls_to_process: return
+        
+        if not vehicle_urls_to_process:
+            print("Info: Keine neuen Sprechwünsche."); return
+
+        navigated_away = True # Wir werden jetzt navigieren
+        print(f"Info: {len(vehicle_urls_to_process)} Sprechwünsche gefunden. Bearbeite...")
         for vehicle_info in vehicle_urls_to_process:
             driver.get(vehicle_info['url'])
             try:
                 transport_button_xpath = "//a[(contains(@href, '/patient/') or contains(@href, '/prisoner/')) and contains(@class, 'btn-success')]"
                 wait.until(EC.element_to_be_clickable((By.XPATH, transport_button_xpath))).click(); time.sleep(2)
             except TimeoutException: print(f"    -> WARNUNG: Kein Transport-Button für '{vehicle_info['name']}' gefunden.")
-    except NoSuchElementException: print("Info: Keine wichtigen Funksprüche vorhanden.")
-    except Exception as e: print(f"FEHLER bei der Sprechwunsch-Bearbeitung: {e}")
+    except NoSuchElementException:
+        print("Info: Keine wichtigen Funksprüche vorhanden.")
+    except Exception as e:
+        print(f"FEHLER bei der Sprechwunsch-Bearbeitung: {e}")
+    finally:
+        # NEU: Dieser Block wird immer ausgeführt, egal was passiert.
+        # Wenn wir auf eine Fahrzeugseite navigiert sind, kehren wir zur Hauptseite zurück.
+        if navigated_away:
+            print("Info: Kehre nach Sprechwunsch-Bearbeitung zur Hauptseite zurück.")
+            driver.get("https://www.leitstellenspiel.de/")
 
 # -----------------------------------------------------------------------------------
 # HAUPT-THREAD FÜR DIE BOT-LOGIK
@@ -418,25 +434,43 @@ def main_bot_logic(gui_vars):
         gui_vars['status'].set("Logge ein..."); driver.get("https://www.leitstellenspiel.de/users/sign_in")
         wait.until(EC.visibility_of_element_located((By.ID, "user_email"))).send_keys(LEITSTELLENSPIEL_USERNAME)
         driver.find_element(By.ID, "user_password").send_keys(LEITSTELLENSPIEL_PASSWORD)
-        time.sleep(1); driver.find_element(By.NAME, "commit").click()
+        time.sleep(1)
+        try:
+            login_button = wait.until(EC.element_to_be_clickable((By.NAME, "commit")))
+            login_button.click()
+        except ElementClickInterceptedException:
+            print("Info: Normaler Klick blockiert. Führe Klick per JavaScript aus...")
+            login_button = wait.until(EC.presence_of_element_located((By.NAME, "commit")))
+            driver.execute_script("arguments[0].click();", login_button)
         try:
             gui_vars['status'].set("Warte auf Hauptseite..."); wait.until(EC.presence_of_element_located((By.ID, "missions_outer"))); gui_vars['status'].set("Login erfolgreich! Bot aktiv.")
             send_discord_notification(f"Bot wurde erfolgreich gestartet auf Account: **{LEITSTELLENSPIEL_USERNAME}**")
-        except TimeoutException: raise Exception("Login fehlgeschlagen.")
+        except TimeoutException: raise Exception("Login fehlgeschlagen. Hauptseite nicht erreicht.")
+        
         while True:
             if gui_vars['stop_event'].is_set():
                 print("Info: Stop-Signal empfangen. Beende Schleife.")
-                break # Verlässt die while-Schleife sauber
+                break
+            if not gui_vars['pause_event'].is_set():
+                gui_vars['status'].set("Bot pausiert. Warte auf 'Continue'...")
+                gui_vars['pause_event'].wait()
+                gui_vars['status'].set("Bot wird fortgesetzt...")
 
-            gui_vars['status'].set("Lade Hauptseite & prüfe Status..."); driver.get("https://www.leitstellenspiel.de/"); wait.until(EC.presence_of_element_located((By.ID, "missions_outer")))
-            today = date.today();
+            gui_vars['status'].set("Lade Hauptseite & prüfe Status...")
+            driver.get("https://www.leitstellenspiel.de/")
+            wait.until(EC.presence_of_element_located((By.ID, "missions_outer")))
+
+            today = date.today()
             if last_check_date != today: bonus_checked_today = False; last_check_date = today
             if not bonus_checked_today:
                 check_and_claim_daily_bonus(driver, wait); bonus_checked_today = True
+            
             check_and_claim_tasks(driver, wait)
             handle_sprechwunsche(driver, wait)
+            
             try:
-                gui_vars['status'].set("Prüfe Einsätze..."); mission_list_container = driver.find_element(By.ID, "missions_outer")
+                gui_vars['status'].set("Prüfe Einsätze...")
+                mission_list_container = driver.find_element(By.ID, "missions_outer")
                 mission_entries = mission_list_container.find_elements(By.XPATH, ".//div[contains(@class, 'missionSideBarEntry')]")
                 mission_data = []; current_mission_ids = set()
                 for entry in mission_entries:
@@ -448,61 +482,52 @@ def main_bot_logic(gui_vars):
                         if href and name and mission_id:
                             mission_data.append({'id': mission_id, 'url': href, 'name': name, 'patienten': patient_count}); current_mission_ids.add(mission_id)
                     except (NoSuchElementException, json.JSONDecodeError): continue
+                
                 dispatched_mission_ids.intersection_update(current_mission_ids)
                 if not mission_data:
                     gui_vars['status'].set(f"Keine Einsätze. Warte {30}s..."); time.sleep(30); continue
+                
                 gui_vars['status'].set(f"{len(mission_data)} Einsätze gefunden. Bearbeite...")
                 for i, mission in enumerate(mission_data):
-                    
-                    if not gui_vars['pause_event'].is_set():
-                        gui_vars['status'].set("Bot pausiert. Warte auf 'Continue'...")
-                        gui_vars['pause_event'].wait() # Hält den Thread hier an
-                        gui_vars['status'].set("Bot wird fortgesetzt...")
-                    
                     if gui_vars['stop_event'].is_set(): break
+                    if not gui_vars['pause_event'].is_set():
+                        gui_vars['status'].set("Bot pausiert..."); gui_vars['pause_event'].wait()
                     if "[Verband]" in mission['name'] or mission['id'] in dispatched_mission_ids: continue
                     gui_vars['mission_name'].set(f"({i+1}/{len(mission_data)}) {mission['name']}"); driver.get(mission['url'])
                     raw_requirements = get_mission_requirements(driver, wait)
                     if not raw_requirements: continue
                     
                     # Logik zur Aufbereitung der Anforderungen
-                    final_requirements = {
-                        'fahrzeuge': [], 
-                        'personal': raw_requirements['personal'], 
-                        'wasser': raw_requirements['wasser'], 
-                        'schaummittel': raw_requirements['schaummittel'], 
-                        'patienten': mission['patienten']
-                    }
-                    translation_map = {"Rettungswagen": "RTW", "Löschfahrzeuge": "Löschfahrzeug", "Drehleitern": "Drehleiter"}
+                    explicit_rtw_count = sum(1 for req_options in raw_requirements['fahrzeuge'] if any("Rettungswagen" in opt for opt in req_options))
+                    patient_bedarf = mission['patienten']
+                    final_rtw_bedarf = max(explicit_rtw_count, patient_bedarf)
+                    final_requirements = {'fahrzeuge': [], 'personal': raw_requirements['personal'], 'wasser': raw_requirements['wasser'], 'schaummittel': raw_requirements['schaummittel']}
                     for req_options in raw_requirements['fahrzeuge']:
-                        processed_options = []
-                        for req_text in req_options:
-                            clean_text = req_text.replace("Benötigte ", "").strip(); translated = False
-                            for key, value in translation_map.items():
-                                if key in clean_text: processed_options.append(value); translated = True; break
-                            if not translated: processed_options.append(clean_text)
-                        final_requirements['fahrzeuge'].append(processed_options)
+                        if not any("Rettungswagen" in opt for opt in req_options):
+                            final_requirements['fahrzeuge'].append(req_options)
+                    for _ in range(final_rtw_bedarf):
+                        final_requirements['fahrzeuge'].append(["RTW"])
                     
-                    # GUI-Anzeige (behebt den "R T W"-Bug)
-                    req_parts = []
-                    readable_requirements = [" oder ".join(options) for options in final_requirements['fahrzeuge']]
+                    # GUI-Anzeige
+                    req_parts = []; readable_requirements = [" oder ".join(options) for options in final_requirements['fahrzeuge']]
                     vehicle_counts = Counter(readable_requirements)
-                    for vehicle_group, count in vehicle_counts.items(): req_parts.append(f"{count}x {vehicle_group}")
+                    for vehicle, count in vehicle_counts.items(): req_parts.append(f"{count}x {vehicle}")
                     if final_requirements['personal'] > 0: req_parts.append(f"{final_requirements['personal']} Personal")
-                    if final_requirements['patienten'] > 0: req_parts.append(f"{final_requirements['patienten']} Patienten")
+                    if patient_bedarf > 0: req_parts.append(f"{patient_bedarf} Patienten")
                     gui_vars['requirements'].set("Bedarf: " + (", ".join(req_parts) if req_parts else "-"))
 
                     available_vehicles = get_available_vehicles(driver, wait)
                     if available_vehicles:
                         generic_types_available = []
                         for vehicle in available_vehicles:
-                            if 'properties' in vehicle and 'typ' in vehicle['properties']: generic_types_available.extend(vehicle['properties']['typ'])
+                            if 'properties' in vehicle and 'typ' in vehicle['properties']:
+                                generic_types_available.extend(vehicle['properties']['typ'])
                         available_counts = Counter(generic_types_available); avail_parts = [f"{count}x {v_type}" for v_type, count in available_counts.items()]
                         gui_vars['availability'].set("Verfügbar (Typen): " + (", ".join(avail_parts)))
                     else:
                         gui_vars['availability'].set("Verfügbar: Keine"); gui_vars['status'].set(f"Keine Fahrzeuge frei. Pausiere..."); time.sleep(PAUSE_IF_NO_VEHICLES_SECONDS); break
                     
-                    checkboxes_to_click = find_best_vehicle_combination(final_requirements, available_vehicles)
+                    checkboxes_to_click = find_best_vehicle_combination(final_requirements, available_vehicles, VEHICLE_DATABASE)
                     if checkboxes_to_click:
                         dispatched_mission_ids.add(mission['id'])
                         gui_vars['status'].set("✓ Alarmiere..."); gui_vars['alarm_status'].set(f"Status: ALARMIERT ({len(checkboxes_to_click)} FZ)")
@@ -514,7 +539,10 @@ def main_bot_logic(gui_vars):
                     else:
                         gui_vars['status'].set("❌ Nicht genug Einheiten frei."); gui_vars['alarm_status'].set("Status: WARTE AUF EINHEITEN")
                     time.sleep(3)
-            except Exception: raise
+            except Exception as e:
+                print(f"Fehler im Verarbeitungszyklus: {e}")
+                traceback.print_exc() # Gib den Fehler aus, aber fahre fort
+                time.sleep(10)
     except Exception as e:
         error_details = traceback.format_exc(); send_discord_notification(f"FATALER FEHLER! Bot beendet.\n```\n{error_details}\n```")
         gui_vars['status'].set("FATALER FEHLER! Details in error_log.txt"); gui_vars['mission_name'].set("Bot angehalten.")
