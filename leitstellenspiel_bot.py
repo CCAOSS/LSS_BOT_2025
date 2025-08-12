@@ -282,21 +282,71 @@ def check_and_claim_daily_bonus(driver, wait):
         except: pass
 
 def check_and_claim_tasks(driver, wait):
+    """
+    Prüft auf erledigte Aufgaben und verwendet einen robusten JavaScript-Klick,
+    um Interaktions-Fehler zu vermeiden.
+    """
+    print("Info: Prüfe auf erledigte Aufgaben...")
     try:
-        profile_dropdown = wait.until(EC.element_to_be_clickable((By.ID, "menu_profile"))); profile_dropdown.click()
+        profile_dropdown = wait.until(EC.element_to_be_clickable((By.ID, "menu_profile")))
+        profile_dropdown.click()
+        
         short_wait = WebDriverWait(driver, 3)
-        short_wait.until(EC.visibility_of_element_located((By.XPATH, "//span[@id='completed_tasks_counter' and not(contains(@class, 'hidden'))]")))
-        driver.find_element(By.XPATH, "//div[contains(@class, 'tasks_and_events_navbar')]").click()
+        task_counter_selector = "//span[@id='completed_tasks_counter' and not(contains(@class, 'hidden'))]"
+        short_wait.until(EC.visibility_of_element_located((By.XPATH, task_counter_selector)))
+        
+        print("Info: Erledigte Aufgabe(n) gefunden! Öffne Aufgaben-Seite...")
+        tasks_link = driver.find_element(By.XPATH, "//div[contains(@class, 'tasks_and_events_navbar')]")
+        tasks_link.click()
+
         wait.until(EC.frame_to_be_available_and_switch_to_it((By.TAG_NAME, "iframe")))
-        all_claim_buttons = wait.until(EC.presence_of_all_elements_located((By.XPATH, "//input[@value='Abholen' and contains(@class, 'btn')]")))
+        print("Info: Erfolgreich in den Aufgaben-iFrame gewechselt.")
+
+        claim_buttons_selector = "//input[@value='Abholen' and contains(@class, 'btn')]"
+        all_claim_buttons = wait.until(EC.presence_of_all_elements_located((By.XPATH, claim_buttons_selector)))
+        
+        clicked_count = 0
+        print(f"Info: {len(all_claim_buttons)} potenzielle Belohnungs-Buttons gefunden. Prüfe, welche aktiv sind...")
+        
         for button in all_claim_buttons:
-            if button.is_enabled(): button.click(); time.sleep(1.5)
+            try:
+                if button.is_enabled():
+                    print("    -> Aktiver Button gefunden. Klicke 'Abholen' per JavaScript...")
+                    
+                    # --- HIER IST DIE KORREKTUR ---
+                    # Ersetze den normalen Klick durch den JavaScript-Klick
+                    driver.execute_script("arguments[0].click();", button)
+                    
+                    clicked_count += 1
+                    print("    -> Belohnung erfolgreich abgeholt.")
+                    time.sleep(1.5)
+                else:
+                    print("    -> Inaktiver Button gefunden. Wird ignoriert.")
+            except Exception as e_click:
+                print(f"Warnung: Konnte einen Button nicht klicken: {e_click}")
+        
+        if clicked_count > 0:
+            print(f"Info: {clicked_count} Belohnung(en) insgesamt abgeholt.")
+        else:
+            print("Info: Keine aktiven Belohnungen zum Abholen gefunden.")
+        
+        time.sleep(2)
+        
     except TimeoutException:
-        try: driver.find_element(By.TAG_NAME, 'body').click(); time.sleep(1)
+        print("Info: Keine neuen, erledigten Aufgaben.")
+        try:
+            driver.find_element(By.TAG_NAME, 'body').click()
+            time.sleep(1)
         except: pass
+            
+    except Exception as e:
+        print(f"FEHLER beim Prüfen der Aufgaben: {e}")
+
     finally:
-        try: driver.switch_to.default_content()
-        except: pass
+        try:
+            driver.switch_to.default_content()
+        except:
+            pass
 
 def handle_sprechwunsche(driver, wait):
     try:
