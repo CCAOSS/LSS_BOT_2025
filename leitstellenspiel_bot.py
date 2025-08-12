@@ -136,7 +136,7 @@ def get_mission_requirements(driver, wait):
                     continue
                 
                 # KORREKTUR: Sucht jetzt nach beiden Begriffen
-                elif "schaummittel" in req_lower or "sonderlöschmittelbedarf" in req_lower:
+                elif "schaummittel" in req_lower or "Sonderlöschmittelbedarf" in req_lower:
                     if count_text.isdigit():
                         raw_requirements['schaummittel'] += int(count_text)
                         print(f"    -> Schaummittel-Bedarf gefunden: {count_text} Liter")
