@@ -1,8 +1,6 @@
 {
     "// -------------------- FEUERWEHR --------------------": {},
 
-    "RW": { "kennung": "61/", "personal": 3, "typ": ["Rüstwagen"] },
-
     "// --EINSATZLEITUNG / SONSTIG": {},
     "ELW 2": { "kennung": "13/", "personal": 3, "typ": ["ELW 2"] },
     "ELW 1": { "kennung": "12/", "personal": 3, "typ": ["ELW 1"] },
@@ -20,9 +18,9 @@
     "Tankwagen": { "kennung": "29/", "personal": 3, "typ": ["TankLöschfahrzeug"], "wasser": 20000, "schaummittel": 0 },
 
     "// --Drehleitern / Kranfahrzeuge": {},
-    "DLK 23": { "kennung": "30/", "personal": 3, "typ": ["Drehleiter"] },
-    "DLK 18": { "kennung": "31/", "personal": 3, "typ": ["Drehleiter"] },
-    "DLK 12": { "kennung": "32/", "personal": 3, "typ": ["Drehleiter"] },
+    "DLK 23": { "kennung": "30/", "personal": 3, "typ": ["Drehleitern"] },
+    "DLK 18": { "kennung": "31/", "personal": 3, "typ": ["Drehleitern"] },
+    "DLK 12": { "kennung": "32/", "personal": 3, "typ": ["Drehleitern"] },
     "FwK": { "kennung": "34/", "personal": 3, "typ": ["FwK"] },
     "WLF": { "kennung": "35/", "personal": 3, "typ": ["Wechselladerfahrzeug"] },
 
@@ -46,9 +44,11 @@
     "SW-KatS": {"kennung": "58/", "personal": 3, "typ": ["Schlauchwagen"]},
     "SW-2000-Tr": {"kennung": "58/", "personal": 3, "typ": ["Schlauchwagen"]},
 
+    "RW": { "kennung": "61/", "personal": 3, "typ": ["Rüstwagen"] },
+
     "// --GEFAHRGUT": {},
     "Dekon-P": { "kennung": "67/", "personal": 6, "typ": ["Dekon-P"] },
-    "GW-Messtechnik": { "kennung": "66/", "personal": 3, "typ": ["GW-Messtechnik"] },
+    "GW-Messtechnik": { "kennung": "66/", "personal": 3, "typ": ["GW-Mess"] },
     "GW-Gefahrgut": { "kennung": "52/", "personal": 3, "typ": ["GW-Gefahrgut"] },
 
     "// --WERKFEUERWEHR": {},
@@ -104,8 +104,8 @@
     "Polizeihubschrauber": { "personal": 3, "typ": ["Polizeihubschrauber"] },
 
     "// -------------------- THW --------------------": {},
-    "GKW": { "personal": 9, "typ": ["Gerätekraftwagen (GKW)"] },
-    "MTW-TZ": { "personal": 9, "typ": ["Mannschaftstransportwagen"] },
+    "GKW": { "personal": 9, "typ": ["GKW"] },
+    "MTW-TZ": { "personal": 9, "typ": ["MTW-TZ"] },
     "MTW-FGr K": { "personal": 9, "typ": ["MTW-FGr K"] },
     "MTW-O": {"personal": 5, "typ": "Rettungshundestaffeln"},
     "MzGW (FGr N)": {"personal": 9, "typ": "MzGW (FGr N)"},
