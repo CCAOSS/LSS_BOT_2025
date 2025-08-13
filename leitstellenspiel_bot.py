@@ -3,6 +3,7 @@ import json
 import os
 import sys
 import threading
+import tempfile # Füge diesen Import oben bei den anderen hinzu
 import tkinter as tk
 from tkinter import ttk
 from collections import Counter
@@ -138,16 +139,29 @@ class StatusWindow(tk.Tk):
 # -----------------------------------------------------------------------------------
 
 def setup_driver():
-    """Konfiguriert den WebDriver intelligent für das jeweilige Betriebssystem (Windows oder Linux)."""
+    """
+    Konfiguriert den WebDriver und weist ihm bei jedem Start ein einzigartiges,
+    temporäres Nutzerverzeichnis zu, um Konflikte zu vermeiden.
+    """
     chrome_options = Options()
     chrome_options.add_argument("--headless"); chrome_options.add_argument("--window-size=1920,1080")
     chrome_options.add_argument("--log-level=3"); chrome_options.add_argument("--disable-gpu"); chrome_options.add_argument("--no-sandbox")
+
+    # --- NEU: Einzigartiges Nutzerverzeichnis erstellen ---
+    # Erstellt einen zufälligen, temporären Ordner für diese Sitzung
+    user_data_dir = tempfile.mkdtemp()
+    chrome_options.add_argument(f"--user-data-dir={user_data_dir}")
+    
+    # Betriebssystem-Erkennung (bleibt unverändert)
     if sys.platform.startswith('linux'):
+        print("Info: Linux-Betriebssystem (Raspberry Pi) erkannt.")
         user_agent = "Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36"
         service = ChromeService(executable_path="/usr/bin/chromedriver")
     else: # win32
+        print("Info: Windows-Betriebssystem erkannt.")
         user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
         service = ChromeService(executable_path=resource_path("chromedriver.exe"))
+    
     chrome_options.add_argument(f'user-agent={user_agent}'); chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"]); chrome_options.add_experimental_option('useAutomationExtension', False)
     driver = webdriver.Chrome(service=service, options=chrome_options)
     driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"); return driver
