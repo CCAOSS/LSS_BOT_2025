@@ -227,8 +227,9 @@ def get_available_vehicles(driver, wait):
             load_more_button_selector = "//a[contains(@class, 'missing_vehicles_load')]"
             load_more_button = driver.find_element(By.XPATH, load_more_button_selector)
             
-            print("Info: 'Fehlende Fahrzeuge laden'-Button gefunden. Klicke ihn...")
-            load_more_button.click()
+            print("Info: 'Fehlende Fahrzeuge laden'-Button gefunden. Klicke ihn per JavaScript...")
+            # KORREKTUR: Ersetze den normalen Klick durch den JavaScript-Klick
+            driver.execute_script("arguments[0].click();", load_more_button)
             
             # Gib der Seite einen Moment Zeit, die neuen Fahrzeuge nachzuladen
             time.sleep(2)
