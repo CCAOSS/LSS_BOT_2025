@@ -112,7 +112,7 @@
     "MLW 5": { "personal": 9, "typ": ["MLW 5"] },
     "MzGW SB 5": { "personal": 9, "typ": ["MzGW SB"] },
     "Anh Hund": {"personal": 0, "typ": "Rettungshundestaffeln"},
-    "LKW K 9": { "personal": 2, "typ": ["LKW Kipper"] },
+    "LKW K 9": { "personal": 2, "typ": ["LKW K 9"] },
     "FüKw": { "personal": 4, "typ": ["Führungskraftwagen (FüKw)"] },
     "BRmG R": { "personal": 2, "typ": ["BRmG R"] },
     "Anh DLE": { "personal": 0, "typ": ["Anh DLE"] },
