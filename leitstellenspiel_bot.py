@@ -168,7 +168,7 @@ def setup_driver():
     driver = webdriver.Chrome(service=service, options=chrome_options)
     driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"); return driver
     
-def get_mission_requirements(driver, wait):
+def get_mission_requirements(driver, wait, player_inventory):
     """Liest Rohdaten inkl. Credits aus dem Hilfe-Fenster mit dem korrekten Selektor."""
     raw_requirements = {'fahrzeuge': [], 'personal': 0, 'wasser': 0, 'schaummittel': 0, 'credits': 0}
     try:
@@ -183,8 +183,19 @@ def get_mission_requirements(driver, wait):
                 if len(cells) >= 2:
                     requirement_text, count_text = cells[0].text.strip(), cells[1].text.strip().replace(" L", "")
                     req_lower = requirement_text.lower()
-                    if "anforderungswahrscheinlichkeit" in req_lower: continue
-                    elif "schlauchwagen" in req_lower:
+                    if "anforderungswahrscheinlichkeit" in req_lower:
+                        # Extrahiere den Fahrzeugtyp aus dem Text
+                        vehicle_type_needed = requirement_text.split("Anforderungswahrscheinlichkeit")[0].strip()
+                        
+                        # NEU: Prüfe gegen das Inventar
+                        if vehicle_type_needed in player_inventory:
+                            raw_requirements['fahrzeuge'].append([vehicle_type_needed])
+                            print(f"    -> Info: Wahrscheinlichkeits-Anforderung '{vehicle_type_needed}' als 1x Bedarf gewertet (Fahrzeug vorhanden).")
+                        else:
+                            print(f"    -> Info: Ignoriere Wahrscheinlichkeits-Anforderung '{vehicle_type_needed}' (Fahrzeug nicht im Bestand).")
+                        continue
+                        
+                    if "schlauchwagen" in req_lower:
                         if count_text.isdigit():
                             for _ in range(int(count_text)): raw_requirements['fahrzeuge'].append(["Schlauchwagen"])
                     elif "schaummittel" in req_lower or "sonderlöschmittelbedarf" in req_lower:
@@ -504,6 +515,49 @@ def handle_sprechwunsche(driver, wait):
             print("Info: Kehre nach Sprechwunsch-Bearbeitung zur Hauptseite zurück.")
             driver.get("https://www.leitstellenspiel.de/")
 
+def get_player_vehicle_inventory(driver, wait):
+    """
+    Liest den Fuhrpark aus der korrekten Tabellenstruktur der /vehicles-Seite aus.
+    """
+    print("Info: Lese den kompletten Fuhrpark (Inventar) ein...")
+    inventory = set()
+    try:
+        driver.get("https://www.leitstellenspiel.de/vehicles")
+        
+        # Der iFrame-Befehl ist hier nicht nötig, da es eine normale Tabelle ist.
+        # Wir suchen nach allen Tabellenzeilen (tr) im Tabellenkörper (tbody).
+        vehicle_rows_selector = "//tbody/tr"
+        
+        # Warte, bis die Zeilen geladen sind
+        vehicle_rows = wait.until(EC.presence_of_all_elements_located((By.XPATH, vehicle_rows_selector)))
+        
+        print(f"Info: {len(vehicle_rows)} Fahrzeuge im Fuhrpark gefunden. Analysiere Typen...")
+
+        for row in vehicle_rows:
+            try:
+                # Finde den Link in der zweiten Spalte (td[2]), der den Namen enthält
+                link_element = row.find_element(By.XPATH, "./td[2]/a")
+                link_text = link_element.text.strip()
+                if not link_text: continue
+
+                # Extrahiere den reinen Fahrzeugtyp (z.B. "HLF 20", "RTW")
+                vehicle_type = link_text.split('(')[0].strip()
+                
+                # Füge nur Typen hinzu, die in unserer Datenbank bekannt sind
+                if vehicle_type in VEHICLE_DATABASE:
+                    inventory.add(vehicle_type)
+            except (NoSuchElementException, IndexError):
+                # Ignoriere Zeilen, die nicht dem erwarteten Muster entsprechen
+                continue
+        
+        print(f"Info: Inventar mit {len(inventory)} einzigartigen Fahrzeugtypen erfolgreich erstellt.")
+        
+    except Exception as e:
+        print(f"FEHLER: Konnte den Fuhrpark nicht einlesen: {e}")
+        traceback.print_exc()
+            
+    return inventory
+
 # -----------------------------------------------------------------------------------
 # HAUPT-THREAD FÜR DIE BOT-LOGIK
 # -----------------------------------------------------------------------------------
@@ -526,6 +580,7 @@ def main_bot_logic(gui_vars):
         try:
             gui_vars['status'].set("Warte auf Hauptseite..."); wait.until(EC.presence_of_element_located((By.ID, "missions_outer"))); gui_vars['status'].set("Login erfolgreich! Bot aktiv.")
             send_discord_notification(f"Bot erfolgreich gestartet auf Account: **{LEITSTELLENSPIEL_USERNAME}**")
+            player_inventory = get_player_vehicle_inventory(driver, wait)
         except TimeoutException: raise Exception("Login fehlgeschlagen.")
         
         while True:
@@ -548,9 +603,11 @@ def main_bot_logic(gui_vars):
                     try:
                         mission_id = entry.get_attribute('mission_id'); url_element = entry.find_element(By.XPATH, ".//a[contains(@class, 'mission-alarm-button')]"); href = url_element.get_attribute('href')
                         name_element = entry.find_element(By.XPATH, ".//a[contains(@id, 'mission_caption_')]"); full_name = name_element.text.strip(); name = full_name.split(',')[0].strip()
-                        patient_count = 0; timeleft = 0
+                        patient_count = 0; timeleft = 0; credits = 0
                         sort_data_str = entry.get_attribute('data-sortable-by')
-                        if sort_data_str: patient_count = json.loads(sort_data_str).get('patients_count', [0, 0])[0]
+                        if sort_data_str:
+                            sort_data = json.loads(sort_data_str)
+                            patient_count = sort_data.get('patients_count', [0, 0])[0]
                         try:
                             countdown_element = entry.find_element(By.XPATH, ".//div[contains(@id, 'mission_overview_countdown_')]")
                             timeleft_str = countdown_element.get_attribute('timeleft')
@@ -568,33 +625,58 @@ def main_bot_logic(gui_vars):
                     if not gui_vars['pause_event'].is_set(): gui_vars['status'].set("Bot pausiert..."); gui_vars['pause_event'].wait()
                     if "[Verband]" in mission['name'] or mission['id'] in dispatched_mission_ids: continue
                     
-                    # KORRIGIERTE FILTER-LOGIK
                     if mission['timeleft'] > MAX_START_DELAY_SECONDS:
                         print(f"Info: Ignoriere zukünftigen Einsatz '{mission['name']}' (Start in {mission['timeleft'] // 60} min)"); continue
                     
                     gui_vars['mission_name'].set(f"({i+1}/{len(mission_data)}) {mission['name']}"); driver.get(mission['url'])
-                    raw_requirements = get_mission_requirements(driver, wait)
+                    raw_requirements = get_mission_requirements(driver, wait, player_inventory)
                     if not raw_requirements: continue
                     
                     if mission['timeleft'] > 0 and raw_requirements.get('credits', 0) < MINIMUM_CREDITS:
                         print(f"Info: Ignoriere unrentablen zukünftigen Einsatz '{mission['name']}' (Credits: {raw_requirements.get('credits', 0)} < {MINIMUM_CREDITS})"); continue
 
-                    final_requirements = {'fahrzeuge': raw_requirements['fahrzeuge'], 'personal': raw_requirements['personal'], 'wasser': raw_requirements['wasser'], 'schaummittel': raw_requirements['schaummittel'], 'patienten': mission['patienten']}
+                    # --- KORRIGIERTE LOGIK ZUR ANFORDERUNGS-AUFBEREITUNG ---
+                    # Übersetze die Roh-Fahrzeugtexte in Standard-Rollen
+                    translation_map = {"Rettungswagen": "RTW", "Löschfahrzeuge": "Löschfahrzeug", "Drehleitern": "Drehleiter"}
+                    final_fahrzeuge_list = []
+                    for req_options in raw_requirements['fahrzeuge']:
+                        processed_options = []
+                        for req_text in req_options:
+                            clean_text = req_text.replace("Benötigte ", "").strip(); translated = False
+                            for key, value in translation_map.items():
+                                if key in clean_text: processed_options.append(value); translated = True; break
+                            if not translated: processed_options.append(clean_text)
+                        final_fahrzeuge_list.append(processed_options)
+
+                    # Kombiniere Bedarfe intelligent (verhindert Doppel-Zählung)
+                    explicit_rtw_count = sum(1 for options in final_fahrzeuge_list if "RTW" in options)
+                    patient_bedarf = mission['patienten']
+                    final_rtw_bedarf = max(explicit_rtw_count, patient_bedarf)
+                    
+                    # Erstelle die finale Anforderungsliste
+                    final_requirements = {'personal': raw_requirements['personal'], 'wasser': raw_requirements['wasser'], 'schaummittel': raw_requirements['schaummittel'], 'patienten': patient_bedarf}
+                    final_requirements['fahrzeuge'] = [options for options in final_fahrzeuge_list if "RTW" not in options]
+                    for _ in range(final_rtw_bedarf):
+                        final_requirements['fahrzeuge'].append(["RTW"])
+                    
+                    # GUI-Anzeige
                     req_parts = []; readable_requirements = [" oder ".join(options) for options in final_requirements['fahrzeuge']]
                     vehicle_counts = Counter(readable_requirements)
                     for vehicle, count in vehicle_counts.items(): req_parts.append(f"{count}x {vehicle}")
                     if final_requirements['personal'] > 0: req_parts.append(f"{final_requirements['personal']} Personal")
-                    if final_requirements['patienten'] > 0: req_parts.append(f"{final_requirements['patienten']} Patienten")
                     gui_vars['requirements'].set("Bedarf: " + (", ".join(req_parts) if req_parts else "-"))
+
                     available_vehicles = get_available_vehicles(driver, wait)
                     if available_vehicles:
                         generic_types_available = []
                         for vehicle in available_vehicles:
-                            if 'properties' in vehicle and 'typ' in vehicle['properties']: generic_types_available.extend(vehicle['properties']['typ'])
+                            if 'properties' in vehicle and 'typ' in vehicle['properties']:
+                                generic_types_available.extend(vehicle['properties']['typ'])
                         available_counts = Counter(generic_types_available); avail_parts = [f"{count}x {v_type}" for v_type, count in available_counts.items()]
                         gui_vars['availability'].set("Verfügbar (Typen): " + (", ".join(avail_parts)))
                     else:
                         gui_vars['availability'].set("Verfügbar: Keine"); gui_vars['status'].set(f"Keine Fahrzeuge frei. Pausiere..."); time.sleep(PAUSE_IF_NO_VEHICLES_SECONDS); break
+                    
                     checkboxes_to_click = find_best_vehicle_combination(final_requirements, available_vehicles, VEHICLE_DATABASE)
                     if checkboxes_to_click:
                         dispatched_mission_ids.add(mission['id'])
