@@ -168,8 +168,10 @@ def setup_driver():
     driver = webdriver.Chrome(service=service, options=chrome_options)
     driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"); return driver
     
+
+    
 def get_mission_requirements(driver, wait, player_inventory):
-    """Liest Rohdaten inkl. Credits aus dem Hilfe-Fenster mit dem korrekten Selektor."""
+    """Liest Rohdaten, bereinigt Anforderungsnamen und behandelt Sonderfälle korrekt."""
     raw_requirements = {'fahrzeuge': [], 'personal': 0, 'wasser': 0, 'schaummittel': 0, 'credits': 0}
     try:
         wait.until(EC.element_to_be_clickable((By.XPATH, "//a[contains(text(), 'Hilfe')]"))).click()
@@ -183,33 +185,37 @@ def get_mission_requirements(driver, wait, player_inventory):
                 if len(cells) >= 2:
                     requirement_text, count_text = cells[0].text.strip(), cells[1].text.strip().replace(" L", "")
                     req_lower = requirement_text.lower()
+                    
+                    # Entferne zuerst den Text in Klammern für eine saubere Erkennung
+                    clean_requirement_text = requirement_text.split('(')[0].strip()
+                    req_lower_clean = clean_requirement_text.lower()
+                    
                     if "anforderungswahrscheinlichkeit" in req_lower:
-                        # Extrahiere den Fahrzeugtyp aus dem Text
                         vehicle_type_needed = requirement_text.split("Anforderungswahrscheinlichkeit")[0].strip()
-                        
-                        # NEU: Prüfe gegen das Inventar
                         if vehicle_type_needed in player_inventory:
                             raw_requirements['fahrzeuge'].append([vehicle_type_needed])
                             print(f"    -> Info: Wahrscheinlichkeits-Anforderung '{vehicle_type_needed}' als 1x Bedarf gewertet (Fahrzeug vorhanden).")
                         else:
                             print(f"    -> Info: Ignoriere Wahrscheinlichkeits-Anforderung '{vehicle_type_needed}' (Fahrzeug nicht im Bestand).")
                         continue
-                        
-                    if "schlauchwagen" in req_lower:
+
+                    # Spezifische Suchen zuerst
+                    if "schlauchwagen" in req_lower_clean:
                         if count_text.isdigit():
                             for _ in range(int(count_text)): raw_requirements['fahrzeuge'].append(["Schlauchwagen"])
-                    elif "schaummittel" in req_lower or "sonderlöschmittelbedarf" in req_lower:
+                    elif "schaummittel" in req_lower_clean or "sonderlöschmittelbedarf" in req_lower_clean:
                         if count_text.isdigit(): raw_requirements['schaummittel'] += int(count_text)
-                    elif "feuerlöschpumpe" in req_lower:
+                    elif "feuerlöschpumpe" in req_lower_clean:
                         if count_text.isdigit():
                             for _ in range(int(count_text)): raw_requirements['fahrzeuge'].append(["Löschfahrzeug", "Tanklöschfahrzeug"])
-                    elif "personal" in req_lower or "feuerwehrleute" in req_lower:
+                    elif "personal" in req_lower_clean or "feuerwehrleute" in req_lower_clean:
                         if count_text.isdigit(): raw_requirements['personal'] += int(count_text)
-                    elif "wasser" in req_lower or "wasserbedarf" in req_lower:
+                    elif "wasser" in req_lower_clean or "wasserbedarf" in req_lower_clean:
                         if count_text.isdigit(): raw_requirements['wasser'] += int(count_text)
+                    # Allgemeiner Fall für Fahrzeuge
                     else:
                         if count_text.isdigit():
-                            clean_text = requirement_text.replace("Benötigte ", "").strip()
+                            clean_text = clean_requirement_text.replace("Benötigte ", "").strip()
                             if " oder " in clean_text:
                                 options = [opt.strip() for opt in clean_text.split(" oder ")]
                                 for _ in range(int(count_text)): raw_requirements['fahrzeuge'].append(options)
@@ -218,19 +224,14 @@ def get_mission_requirements(driver, wait, player_inventory):
         except TimeoutException:
             print("Info: Keine Fahrzeug-Anforderungstabelle gefunden.")
 
-        try:
+        try: # Credits auslesen
             credits_selector = "//td[normalize-space()='Credits im Durchschnitt']/following-sibling::td"
             credits_element = driver.find_element(By.XPATH, credits_selector)
             credits_text = credits_element.text.strip().replace(".", "").replace(",", "")
-            if credits_text.isdigit():
-                raw_requirements['credits'] = int(credits_text)
-                print(f"Info: Durchschnittlicher Verdienst: {raw_requirements['credits']} Credits.")
-        except NoSuchElementException:
-            print("Info: Konnte den durchschnittlichen Verdienst nicht finden.")
+            if credits_text.isdigit(): raw_requirements['credits'] = int(credits_text)
+        except NoSuchElementException: pass
 
-    except TimeoutException:
-        print("FEHLER: Hilfe-Button nicht gefunden.")
-        return None
+    except TimeoutException: return None
     finally:
         try: wait.until(EC.element_to_be_clickable((By.XPATH, "//a[text()='Zurück']"))).click()
         except: driver.refresh()
@@ -292,8 +293,8 @@ def get_available_vehicles(driver, wait):
 
 def find_best_vehicle_combination(requirements, available_vehicles, vehicle_data):
     """
-    Findet die beste Kombination und gibt bei einem Fehlschlag eine
-    detaillierte Liste der fehlenden Fahrzeugtypen aus.
+    Findet die beste Kombination und greift jetzt konsistent auf die 'properties'-Struktur zu,
+    um den 'KeyError: type' endgültig zu beheben.
     """
     if requirements.get('patienten', 0) > 0:
         for _ in range(requirements['patienten']):
@@ -305,9 +306,6 @@ def find_best_vehicle_combination(requirements, available_vehicles, vehicle_data
     needed_schaummittel = requirements.get('schaummittel', 0)
     needed_patienten = requirements.get('patienten', 0)
     
-    # Zähle, wie oft jeder Typ ODER jede "Oder"-Gruppe benötigt wird
-    needed_vehicle_roles = Counter(" oder ".join(options) for options in needed_vehicle_options_list)
-    
     vehicles_to_send = []
     pool = list(available_vehicles)
 
@@ -316,21 +314,25 @@ def find_best_vehicle_combination(requirements, available_vehicles, vehicle_data
         found_match = False
         for needed_type in needed_options:
             for vehicle in list(pool):
+                # KORREKTUR: Greife direkt auf die bereits angehängten 'properties' zu
                 if needed_type in vehicle['properties'].get('typ', []):
                     vehicles_to_send.append(vehicle); pool.remove(vehicle); found_match = True; break
             if found_match: break
     
-    # 2. Ressourcen berechnen und Defizite auffüllen
+    # 2. Berechne, was die bisher ausgewählten Fahrzeuge mitbringen
+    # KORREKTUR: Greife überall auf 'properties' zu
     provided_personal = sum(v['properties'].get('personal', 0) for v in vehicles_to_send)
     provided_wasser = sum(v['properties'].get('wasser', 0) for v in vehicles_to_send)
     provided_schaummittel = sum(v['properties'].get('schaummittel', 0) for v in vehicles_to_send)
     provided_patienten = sum(v['properties'].get('patienten_kapazitaet', 0) for v in vehicles_to_send)
     
+    # 3. Defizit-Auffüllung (Hilfsfunktion)
     def fill_deficit(resource_key, current_provided, needed, resource_name):
         nonlocal pool, vehicles_to_send, provided_personal, provided_wasser, provided_schaummittel, provided_patienten
         if current_provided < needed:
             deficit = needed - current_provided
             print(f"Info: {deficit} {resource_name} wird noch benötigt.")
+            # KORREKTUR: Greife auch hier auf 'properties' zu
             pool.sort(key=lambda v: v['properties'].get(resource_key, 0), reverse=True)
             for vehicle in list(pool):
                 if current_provided >= needed: break
@@ -338,8 +340,10 @@ def find_best_vehicle_combination(requirements, available_vehicles, vehicle_data
                 resource_val = props.get(resource_key, 0)
                 if resource_val > 0:
                     vehicles_to_send.append(vehicle); pool.remove(vehicle)
-                    provided_personal += props.get('personal', 0); provided_wasser += props.get('wasser', 0)
-                    provided_schaummittel += props.get('schaummittel', 0); provided_patienten += props.get('patienten_kapazitaet', 0)
+                    provided_personal += props.get('personal', 0)
+                    provided_wasser += props.get('wasser', 0)
+                    provided_schaummittel += props.get('schaummittel', 0)
+                    provided_patienten += props.get('patienten_kapazitaet', 0)
                     current_provided += resource_val
         return current_provided
 
@@ -365,34 +369,32 @@ def find_best_vehicle_combination(requirements, available_vehicles, vehicle_data
         return [v['checkbox'] for v in vehicles_to_send]
     else:
         print("Keine passende Fahrzeugkombination gefunden.")
-        
-        # --- NEU: Detaillierte Fehlbedarfsliste für Fahrzeugtypen ---
+        # Detaillierte Fehlerausgabe
         if not all_vehicles_met:
-            print("-> Es fehlen benötigte Fahrzeugtypen:")
-            # Zähle, was benötigt wird
-            needed_counts = Counter(" oder ".join(options) for options in needed_vehicle_options_list)
-            # Zähle, was am Ende in der Sendeliste gelandet ist
-            sent_options = []
-            for v in vehicles_to_send:
-                # Finde heraus, welche Anforderung dieses Fahrzeug erfüllt hat
-                for needed_options in needed_vehicle_options_list:
-                    if any(role in v['properties'].get('typ', []) for role in needed_options):
-                        sent_options.append(" oder ".join(needed_options))
-                        break
-            sent_counts = Counter(sent_options)
-            
-            # Vergleiche "Benötigt" mit "Gesendet"
-            for needed_str, needed_num in needed_counts.items():
-                sent_num = sent_counts.get(needed_str, 0)
-                if sent_num < needed_num:
-                    print(f"    - {needed_num - sent_num}x {needed_str}")
+             print("-> Es fehlen benötigte Fahrzeugtypen:")
+             needed_counts = Counter(" oder ".join(options) for options in needed_vehicle_options_list)
+             sent_options = []
+             temp_vehicles_to_send = list(vehicles_to_send)
+             for needed_options_str in needed_counts:
+                 for vehicle in list(temp_vehicles_to_send):
+                     # KORREKTUR: Greife auf 'properties' zu
+                     vehicle_roles = vehicle['properties'].get('typ', [])
+                     if any(opt in vehicle_roles for opt in needed_options_str.split(' oder ')):
+                         sent_options.append(needed_options_str)
+                         temp_vehicles_to_send.remove(vehicle)
+                         break
+             sent_counts = Counter(sent_options)
+             for needed_str, needed_num in needed_counts.items():
+                 sent_num = sent_counts.get(needed_str, 0)
+                 if sent_num < needed_num:
+                     print(f"    - {needed_num - sent_num}x {needed_str}")
         
         if provided_personal < needed_personal: print(f"-> Es fehlen {needed_personal - provided_personal} Personal.")
         if provided_wasser < needed_wasser: print(f"-> Es fehlen {needed_wasser - provided_wasser} L Wasser.")
         if provided_schaummittel < needed_schaummittel: print(f"-> Es fehlen {needed_schaummittel - provided_schaummittel} L Schaummittel.")
         if provided_patienten < needed_patienten: print(f"-> Es fehlen {needed_patienten - provided_patienten} Patienten-Transportplätze.")
         return []
-
+        
 def send_discord_notification(message):
     if "discord_webhook_url" in config and config["discord_webhook_url"]:
         data = {"content": f"🚨 **LSS Bot Alert:**\n>>> {message}"}

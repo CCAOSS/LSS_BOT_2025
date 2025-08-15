@@ -89,6 +89,7 @@
     "FuStW": { "personal": 2, "typ": ["Funkstreifenwagen"] },
     "FuStW (DGL)": {"personal": 2, "typ": ["Funkstreifenwagen (Dienstgruppenleitung)", "Funkstreifenwagen"]},
     "Zivilstreifenwagen": {"personal":2, "typ": ["Zivilstreifenwagen"] },
+    "DHuFüKW": {"personal":2, "typ": ["DHuFüKW"] },
 
     "SEK - ZF": { "personal": 5, "typ": ["SEK-Fahrzeuge"] },
     "SEK - MTF": { "personal": 5, "typ": ["SEK-Fahrzeuge"] },
