@@ -535,24 +535,29 @@ def get_player_vehicle_inventory(driver, wait):
         
         print(f"Info: {len(vehicle_rows)} Fahrzeuge im Fuhrpark gefunden. Analysiere Typen...")
 
-        for row in vehicle_rows:
-            try:
-                # Finde den Link in der zweiten Spalte (td[2]), der den Namen enthält
-                link_element = row.find_element(By.XPATH, "./td[2]/a")
-                link_text = link_element.text.strip()
-                if not link_text: continue
+        kennung_map = {props['kennung']: std_type for std_type, props in VEHICLE_DATABASE.items() if props.get('kennung') and props.get('kennung') != ""}
 
-                # Extrahiere den reinen Fahrzeugtyp (z.B. "HLF 20", "RTW")
-                vehicle_type = link_text.split('(')[0].strip()
-                
-                # Füge nur Typen hinzu, die in unserer Datenbank bekannt sind
-                if vehicle_type in VEHICLE_DATABASE:
-                    inventory.add(vehicle_type)
-            except (NoSuchElementException, IndexError):
-                # Ignoriere Zeilen, die nicht dem erwarteten Muster entsprechen
-                continue
+        for link in vehicle_rows:
+            link_text = link.text.strip()
+            if not link_text: continue
+
+            identified_type = None
+            
+            # Methode 1: Prüfe, ob der Name exakt einem Typ in der Datenbank entspricht (für Standard-Fahrzeuge)
+            if link_text in VEHICLE_DATABASE:
+                identified_type = link_text
+            
+            # Methode 2: Wenn nicht, prüfe, ob eine Kennung im Namen enthalten ist
+            else:
+                for kennung, std_type in kennung_map.items():
+                    if kennung in link_text:
+                        identified_type = std_type
+                        break
+            
+            if identified_type:
+                inventory.add(identified_type)
         
-        print(f"Info: Inventar mit {len(inventory)} einzigartigen Fahrzeugtypen erfolgreich erstellt.")
+        print(f"Info: Inventar mit {len(inventory)} einzigartigen Fahrzeugtypen erfolgreich erstellt: {inventory}")
         
     except Exception as e:
         print(f"FEHLER: Konnte den Fuhrpark nicht einlesen: {e}")
