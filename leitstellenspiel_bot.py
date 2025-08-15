@@ -240,50 +240,40 @@ def get_mission_requirements(driver, wait, player_inventory):
 
 def get_available_vehicles(driver, wait):
     """
-    Findet Fahrzeuge, klickt aber zuerst auf den "Fehlende Fahrzeuge laden"-Button,
-    falls dieser vorhanden ist, um die vollständige Liste zu erhalten.
+    **ANGEPASST:** Findet verfügbare Fahrzeuge und speichert jetzt auch den
+    spezifischen 'vehicle_type' für eine saubere GUI-Anzeige.
     """
     available_vehicles = []
     vehicle_table_selector = "#vehicle_show_table_all"
     
     try:
-        # --- NEUE LOGIK: "MEHR LADEN"-BUTTON SUCHEN UND KLICKEN ---
         try:
-            # Suche gezielt nach dem Button, den du gefunden hast
             load_more_button_selector = "//a[contains(@class, 'missing_vehicles_load')]"
             load_more_button = driver.find_element(By.XPATH, load_more_button_selector)
-            
-            print("Info: 'Fehlende Fahrzeuge laden'-Button gefunden. Klicke ihn per JavaScript...")
-            # KORREKTUR: Ersetze den normalen Klick durch den JavaScript-Klick
+            print("Info: 'Fehlende Fahrzeuge laden'-Button gefunden. Klicke ihn...")
             driver.execute_script("arguments[0].click();", load_more_button)
-            
-            # Gib der Seite einen Moment Zeit, die neuen Fahrzeuge nachzuladen
             time.sleep(2)
-            
         except NoSuchElementException:
-            # Das ist der Normalfall, wenn alle Fahrzeuge bereits angezeigt werden.
             print("Info: Alle Fahrzeuge werden bereits angezeigt.")
 
-        # --- Die bestehende Logik läuft jetzt mit der vollständigen Liste ---
         vehicle_table = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, vehicle_table_selector)))
         vehicle_rows = vehicle_table.find_elements(By.XPATH, ".//tbody/tr")
         
-        # ... (Der Rest der Funktion zum Auslesen der Fahrzeuge bleibt unverändert) ...
         for row in vehicle_rows:
             try:
                 checkbox = row.find_element(By.CSS_SELECTOR, "input.vehicle_checkbox")
-                full_vehicle_name = row.get_attribute('vehicle_caption') or row.text.strip()
-                vehicle_properties = None
-                found_identifier = None
-                for identifier, properties in VEHICLE_DATABASE.items():
-                    if identifier.startswith("/") and identifier in full_vehicle_name:
-                        vehicle_properties = properties; found_identifier = identifier; break
-                if not vehicle_properties:
-                    standard_type_from_attr = row.get_attribute('vehicle_type')
-                    if standard_type_from_attr in VEHICLE_DATABASE:
-                        vehicle_properties = VEHICLE_DATABASE[standard_type_from_attr]; found_identifier = standard_type_from_attr
-                if vehicle_properties:
-                    available_vehicles.append({'properties': vehicle_properties, 'checkbox': checkbox, 'name': full_vehicle_name})
+                vehicle_type = row.get_attribute('vehicle_type')
+                
+                if vehicle_type and vehicle_type in VEHICLE_DATABASE:
+                    full_vehicle_name = row.get_attribute('vehicle_caption') or "Unbekannter Name"
+                    vehicle_properties = VEHICLE_DATABASE[vehicle_type]
+                    # NEU: Der 'vehicle_type' wird hier explizit mitgespeichert.
+                    available_vehicles.append({
+                        'properties': vehicle_properties, 
+                        'checkbox': checkbox, 
+                        'name': full_vehicle_name,
+                        'vehicle_type': vehicle_type  # Diese Zeile ist neu
+                    })
             except NoSuchElementException:
                 continue
     except TimeoutException:
@@ -293,46 +283,77 @@ def get_available_vehicles(driver, wait):
 
 def find_best_vehicle_combination(requirements, available_vehicles, vehicle_data):
     """
-    Findet die beste Kombination und greift jetzt konsistent auf die 'properties'-Struktur zu,
-    um den 'KeyError: type' endgültig zu beheben.
+    **NEUE LOGIK V3:** Findet die beste Fahrzeugkombination mit einer verbesserten,
+    "gierigen" Auswahl-Logik, die Fahrzeuge mit mehreren Rollen korrekt behandelt.
     """
-    if requirements.get('patienten', 0) > 0:
-        for _ in range(requirements['patienten']):
-            requirements['fahrzeuge'].append(["RTW"])
-
+    # Vorbereitung der Anforderungen (unverändert)
     needed_vehicle_options_list = requirements.get('fahrzeuge', [])
     needed_personal = requirements.get('personal', 0)
     needed_wasser = requirements.get('wasser', 0)
     needed_schaummittel = requirements.get('schaummittel', 0)
-    needed_patienten = requirements.get('patienten', 0)
-    
+    patient_bedarf = requirements.get('patienten', 0)
+
+    if patient_bedarf > 10:
+        needed_vehicle_options_list.append(["GW-San"])
+        needed_vehicle_options_list.append(["ELW 1 (SEG)"])
+
+    explicit_rtw_count = sum(1 for options in needed_vehicle_options_list if "RTW" in options)
+    needed_vehicle_options_list = [options for options in needed_vehicle_options_list if "RTW" not in options]
+    rtws_to_add = min(patient_bedarf, 15)
+    final_rtw_bedarf = max(explicit_rtw_count, rtws_to_add)
+    for _ in range(final_rtw_bedarf):
+        needed_vehicle_options_list.append(["RTW"])
+
+    # --- START DER NEUEN AUSWAHL-LOGIK ---
     vehicles_to_send = []
     pool = list(available_vehicles)
-
-    # 1. Decke den spezifischen Fahrzeug-Typ-Bedarf
-    for needed_options in needed_vehicle_options_list:
-        found_match = False
-        for needed_type in needed_options:
-            for vehicle in list(pool):
-                # KORREKTUR: Greife direkt auf die bereits angehängten 'properties' zu
-                if needed_type in vehicle['properties'].get('typ', []):
-                    vehicles_to_send.append(vehicle); pool.remove(vehicle); found_match = True; break
-            if found_match: break
     
-    # 2. Berechne, was die bisher ausgewählten Fahrzeuge mitbringen
-    # KORREKTUR: Greife überall auf 'properties' zu
+    # Wandle die Anforderungsliste in eine zählbare Form um
+    needed_counts = Counter(opt for sublist in needed_vehicle_options_list for opt in sublist)
+    
+    # Die Schleife läuft, solange es ungedeckte Anforderungen und verfügbare Fahrzeuge gibt
+    while True:
+        # 1. Zähle die aktuell durch `vehicles_to_send` abgedeckten Rollen
+        current_provided_roles = [role for v in vehicles_to_send for role in v['properties'].get('typ', [])]
+        current_counts = Counter(current_provided_roles)
+
+        # 2. Finde die beste nächste Wahl aus dem Pool
+        best_vehicle_to_add = None
+        highest_score = 0
+
+        for vehicle in pool:
+            score = 0
+            vehicle_roles = vehicle['properties'].get('typ', [])
+            # Bewerte das Fahrzeug danach, wie viele *noch benötigte* Rollen es erfüllt
+            temp_counts = current_counts.copy()
+            for role in vehicle_roles:
+                if temp_counts.get(role, 0) < needed_counts.get(role, 0):
+                    score += 1
+                    temp_counts[role] = temp_counts.get(role, 0) + 1
+            
+            if score > highest_score:
+                highest_score = score
+                best_vehicle_to_add = vehicle
+
+        # 3. Wenn ein nützliches Fahrzeug gefunden wurde, füge es hinzu. Sonst beende die Suche.
+        if best_vehicle_to_add:
+            vehicles_to_send.append(best_vehicle_to_add)
+            pool.remove(best_vehicle_to_add)
+        else:
+            break  # Kein Fahrzeug im Pool kann eine offene Anforderung mehr erfüllen
+            
+    # --- ENDE DER NEUEN AUSWAHL-LOGIK ---
+
+    # 2. Berechne, was die ausgewählten Fahrzeuge mitbringen (unverändert)
     provided_personal = sum(v['properties'].get('personal', 0) for v in vehicles_to_send)
     provided_wasser = sum(v['properties'].get('wasser', 0) for v in vehicles_to_send)
     provided_schaummittel = sum(v['properties'].get('schaummittel', 0) for v in vehicles_to_send)
-    provided_patienten = sum(v['properties'].get('patienten_kapazitaet', 0) for v in vehicles_to_send)
-    
-    # 3. Defizit-Auffüllung (Hilfsfunktion)
+    provided_patienten_kapazitaet = sum(v['properties'].get('patienten_kapazitaet', 0) for v in vehicles_to_send)
+
+    # 3. Defizit-Auffüllung für Ressourcen (Wasser, Personal etc.) - füllt ggf. weiter auf
     def fill_deficit(resource_key, current_provided, needed, resource_name):
-        nonlocal pool, vehicles_to_send, provided_personal, provided_wasser, provided_schaummittel, provided_patienten
+        nonlocal pool, vehicles_to_send, provided_personal, provided_wasser, provided_schaummittel, provided_patienten_kapazitaet
         if current_provided < needed:
-            deficit = needed - current_provided
-            print(f"Info: {deficit} {resource_name} wird noch benötigt.")
-            # KORREKTUR: Greife auch hier auf 'properties' zu
             pool.sort(key=lambda v: v['properties'].get(resource_key, 0), reverse=True)
             for vehicle in list(pool):
                 if current_provided >= needed: break
@@ -343,56 +364,44 @@ def find_best_vehicle_combination(requirements, available_vehicles, vehicle_data
                     provided_personal += props.get('personal', 0)
                     provided_wasser += props.get('wasser', 0)
                     provided_schaummittel += props.get('schaummittel', 0)
-                    provided_patienten += props.get('patienten_kapazitaet', 0)
+                    provided_patienten_kapazitaet += props.get('patienten_kapazitaet', 0)
                     current_provided += resource_val
         return current_provided
 
     provided_wasser = fill_deficit('wasser', provided_wasser, needed_wasser, 'Liter Wasser')
     provided_schaummittel = fill_deficit('schaummittel', provided_schaummittel, needed_schaummittel, 'Liter Schaummittel')
     provided_personal = fill_deficit('personal', provided_personal, needed_personal, 'Personal')
-    provided_patienten = fill_deficit('patienten_kapazitaet', provided_patienten, needed_patienten, 'Patienten-Transportplätze')
+    provided_patienten_kapazitaet = fill_deficit('patienten_kapazitaet', provided_patienten_kapazitaet, patient_bedarf, 'Patienten-Transportplätze')
 
-    # 4. Finale Prüfung
-    final_vehicle_counts = Counter(role for v in vehicles_to_send for role in v['properties'].get('typ', []))
-    all_vehicles_met = True
-    temp_final_counts = final_vehicle_counts.copy()
-    for needed_options in needed_vehicle_options_list:
-        requirement_fulfilled = False
-        for option in needed_options:
-            if temp_final_counts.get(option, 0) > 0:
-                temp_final_counts[option] -= 1; requirement_fulfilled = True; break
-        if not requirement_fulfilled:
-            all_vehicles_met = False; break
+    # 4. Finale Prüfung (unverändert, dient als finales Sicherheitsnetz)
+    final_vehicle_roles = [role for v in vehicles_to_send for role in v['properties'].get('typ', [])]
+    final_counts = Counter(final_vehicle_roles)
     
-    if all_vehicles_met and provided_personal >= needed_personal and provided_wasser >= needed_wasser and provided_schaummittel >= needed_schaummittel and provided_patienten >= needed_patienten:
+    all_vehicles_met = True
+    temp_needed_counts = Counter(opt for sublist in needed_vehicle_options_list for opt in sublist)
+    
+    for role, required_num in temp_needed_counts.items():
+        if final_counts.get(role, 0) < required_num:
+            all_vehicles_met = False
+            break
+
+    if all_vehicles_met and provided_personal >= needed_personal and provided_wasser >= needed_wasser and provided_schaummittel >= needed_schaummittel and provided_patienten_kapazitaet >= patient_bedarf:
         print(f"Erfolgreiche Zuteilung gefunden! Sende {len(vehicles_to_send)} Fahrzeuge.")
         return [v['checkbox'] for v in vehicles_to_send]
     else:
         print("Keine passende Fahrzeugkombination gefunden.")
-        # Detaillierte Fehlerausgabe
+        # Detaillierte Fehlerausgabe...
         if not all_vehicles_met:
-             print("-> Es fehlen benötigte Fahrzeugtypen:")
-             needed_counts = Counter(" oder ".join(options) for options in needed_vehicle_options_list)
-             sent_options = []
-             temp_vehicles_to_send = list(vehicles_to_send)
-             for needed_options_str in needed_counts:
-                 for vehicle in list(temp_vehicles_to_send):
-                     # KORREKTUR: Greife auf 'properties' zu
-                     vehicle_roles = vehicle['properties'].get('typ', [])
-                     if any(opt in vehicle_roles for opt in needed_options_str.split(' oder ')):
-                         sent_options.append(needed_options_str)
-                         temp_vehicles_to_send.remove(vehicle)
-                         break
-             sent_counts = Counter(sent_options)
-             for needed_str, needed_num in needed_counts.items():
-                 sent_num = sent_counts.get(needed_str, 0)
-                 if sent_num < needed_num:
-                     print(f"    - {needed_num - sent_num}x {needed_str}")
+            print("-> Es fehlen benötigte Fahrzeugtypen:")
+            for role, required_num in temp_needed_counts.items():
+                sent_num = final_counts.get(role, 0)
+                if sent_num < required_num:
+                    print(f"     - {required_num - sent_num}x {role}")
         
         if provided_personal < needed_personal: print(f"-> Es fehlen {needed_personal - provided_personal} Personal.")
         if provided_wasser < needed_wasser: print(f"-> Es fehlen {needed_wasser - provided_wasser} L Wasser.")
         if provided_schaummittel < needed_schaummittel: print(f"-> Es fehlen {needed_schaummittel - provided_schaummittel} L Schaummittel.")
-        if provided_patienten < needed_patienten: print(f"-> Es fehlen {needed_patienten - provided_patienten} Patienten-Transportplätze.")
+        if provided_patienten_kapazitaet < patient_bedarf: print(f"-> Es fehlen {patient_bedarf - provided_patienten_kapazitaet} Patienten-Transportplätze.")
         return []
         
 def send_discord_notification(message):
@@ -674,15 +683,21 @@ def main_bot_logic(gui_vars):
                     gui_vars['requirements'].set("Bedarf: " + (", ".join(req_parts) if req_parts else "-"))
 
                     available_vehicles = get_available_vehicles(driver, wait)
+                    
+                    # --- KORRIGIERTER ANZEIGE-BLOCK ---
                     if available_vehicles:
-                        generic_types_available = []
-                        for vehicle in available_vehicles:
-                            if 'properties' in vehicle and 'typ' in vehicle['properties']:
-                                generic_types_available.extend(vehicle['properties']['typ'])
-                        available_counts = Counter(generic_types_available); avail_parts = [f"{count}x {v_type}" for v_type, count in available_counts.items()]
-                        gui_vars['availability'].set("Verfügbar (Typen): " + (", ".join(avail_parts)))
+                        # Zähle die exakten Fahrzeugtypen statt der allgemeinen Rollen
+                        specific_types = [v['vehicle_type'] for v in available_vehicles]
+                        available_counts = Counter(specific_types)
+                        
+                        # Erstelle die saubere Anzeige
+                        avail_parts = [f"{count}x {v_type}" for v_type, count in available_counts.items()]
+                        gui_vars['availability'].set("Verfügbar: " + (", ".join(avail_parts)))
                     else:
-                        gui_vars['availability'].set("Verfügbar: Keine"); gui_vars['status'].set(f"Keine Fahrzeuge frei. Pausiere..."); time.sleep(PAUSE_IF_NO_VEHICLES_SECONDS); break
+                        gui_vars['availability'].set("Verfügbar: Keine")
+                        gui_vars['status'].set(f"Keine Fahrzeuge frei. Pausiere {PAUSE_IF_NO_VEHICLES_SECONDS}s...")
+                        time.sleep(PAUSE_IF_NO_VEHICLES_SECONDS)
+                        break
                     
                     checkboxes_to_click = find_best_vehicle_combination(final_requirements, available_vehicles, VEHICLE_DATABASE)
                     if checkboxes_to_click:

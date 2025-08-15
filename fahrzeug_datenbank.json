@@ -30,6 +30,7 @@
     "HLF 20": { "kennung": "40/", "personal": 9, "typ": ["Löschfahrzeug", "Rüstwagen"], "wasser": 2000, "schaummittel": 120 },
     "HLF 10": { "kennung": "42/", "personal": 9, "typ": ["Löschfahrzeug", "Rüstwagen"], "wasser": 1600, "schaummittel": 120 },
     "LF 8/6": { "kennung": "48/", "personal": 9, "typ": ["Löschfahrzeug"], "wasser": 600, "schaummittel": 60 },
+    "LF 20/16": {"personal": 9, "typ": ["Löschfahrzeug"], "wasser": 1600, "schaummittel": 150},
     "TSF-W": { "kennung": "46/", "personal": 6, "typ": ["Löschfahrzeug"], "wasser": 750, "schaummittel": 60 },
     "MLF": { "kennung": "47/", "personal": 6, "typ": ["Löschfahrzeug"], "wasser": 1000, "schaummittel": 150 },
     "HLF Schiene": {"personal": 9, "typ": ["Löschfahrzeug", "Rüstwagen", "Bahnrettungsfahrzeuge"], "wasser": 1460, "schaummittel": 150},
