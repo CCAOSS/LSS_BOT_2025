@@ -190,7 +190,7 @@ def get_mission_requirements(driver, wait, player_inventory):
                     clean_requirement_text = requirement_text.split('(')[0].strip()
                     req_lower_clean = clean_requirement_text.lower()
                     
-                    skip: False
+                    skip = False
 
                     if "anforderungswahrscheinlichkeit" in req_lower:
                         vehicle_type_needed = requirement_text.split("Anforderungswahrscheinlichkeit")[0].strip()
