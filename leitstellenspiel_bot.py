@@ -201,7 +201,7 @@ def get_mission_requirements(driver, wait, player_inventory):
                             skip = True
                             print(f"    -> Info: Ignoriere Wahrscheinlichkeits-Anforderung '{vehicle_type_needed}' (Fahrzeug nicht im Bestand).")
                     
-                    if skip: 
+                    if skip == True: 
                         print("Continuing") 
                         continue
 
