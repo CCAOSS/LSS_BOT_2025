@@ -172,8 +172,9 @@ def setup_driver():
     
 def get_mission_requirements(driver, wait, player_inventory):
     """
-    **FINALER FIX V6:** Implementiert eine radikal vereinfachte und direkte Logik,
-    um das "Ignorieren"-Problem endgültig zu lösen.
+    **BUGFIX V7:** Behebt einen Parsing-Fehler, indem gängige Pluralformen
+    aus Einsatzanforderungen (z.B. "Feuerwehrkräne") in die korrekte Einzahl
+    ("Feuerwehrkran") umgewandelt werden.
     """
     raw_requirements = {'fahrzeuge': [], 'personal': 0, 'wasser': 0, 'schaummittel': 0, 'credits': 0}
     try:
@@ -186,25 +187,29 @@ def get_mission_requirements(driver, wait, player_inventory):
                 cells = row.find_elements(By.TAG_NAME, 'td')
                 if len(cells) < 2: continue
                 
-                requirement_text = cells[0].text.strip()
-                count_text = cells[1].text.strip().replace(" L", "")
+                requirement_text, count_text = cells[0].text.strip(), cells[1].text.strip().replace(" L", "")
                 req_lower = requirement_text.lower()
 
-                # --- NEUE, EINFACHE LOGIK ---
-                # Wenn es eine Wahrscheinlichkeits-Anforderung ist...
                 if "anforderungswahrscheinlichkeit" in req_lower:
                     vehicle_type_needed = requirement_text.split("Anforderungswahrscheinlichkeit")[0].strip()
-                    
-                    # ...und du das Fahrzeug NICHT besitzt...
                     if vehicle_type_needed not in player_inventory:
                         print(f"    -> Info: Ignoriere Wahrscheinlichkeits-Anforderung '{vehicle_type_needed}' (nicht im Bestand).")
-                        # ...dann springe SOFORT zur nächsten Zeile. Garantiert keine weitere Verarbeitung.
                         continue
                 
-                # Alle anderen Zeilen (feste Anforderungen oder Wahrscheinlichkeiten für Fahrzeuge,
-                # die du besitzt) werden ganz normal weiterverarbeitet.
-                
                 clean_requirement_text = requirement_text.split('(')[0].strip()
+                
+                # --- NEUE LOGIK ZUR PLURAL-ERKENNUNG ---
+                # Wandelt gängige Plural -> Singular um, bevor die Anforderung verarbeitet wird
+                if clean_requirement_text.endswith("kräne"):
+                    clean_requirement_text = clean_requirement_text.replace("kräne", "kran")
+                elif clean_requirement_text.endswith("wägen"):
+                     clean_requirement_text = clean_requirement_text.replace("wägen", "wagen")
+                elif clean_requirement_text.endswith("leitern"):
+                     clean_requirement_text = clean_requirement_text.replace("leitern", "leiter")
+                elif clean_requirement_text.endswith("fahrzeuge"):
+                     clean_requirement_text = clean_requirement_text.replace("fahrzeuge", "fahrzeug")
+                # --- ENDE NEUE LOGIK ---
+                
                 req_lower_clean = clean_requirement_text.lower()
                 
                 if "schlauchwagen" in req_lower_clean:
