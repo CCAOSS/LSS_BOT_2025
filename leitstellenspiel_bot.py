@@ -171,77 +171,89 @@ def setup_driver():
 
     
 def get_mission_requirements(driver, wait, player_inventory):
-    """Liest Rohdaten, bereinigt Anforderungsnamen und behandelt Sonderfälle korrekt."""
+    """
+    **NEUE LOGIK V5:** Verhindert das Doppel-Zählen von Anforderungen, indem zuerst
+    feste Anforderungen identifiziert und redundante Wahrscheinlichkeits-Zeilen
+    danach ignoriert werden.
+    """
     raw_requirements = {'fahrzeuge': [], 'personal': 0, 'wasser': 0, 'schaummittel': 0, 'credits': 0}
     try:
         wait.until(EC.element_to_be_clickable((By.XPATH, "//a[contains(text(), 'Hilfe')]"))).click()
-        
         try:
-            table_selector = "//table[.//th[contains(text(), 'Fahrzeuge') or contains(text(), 'Rettungsmittel')]]"
-            vehicle_table = wait.until(EC.visibility_of_element_located((By.XPATH, table_selector)))
+            vehicle_table = wait.until(EC.visibility_of_element_located((By.XPATH, "//table[.//th[contains(text(), 'Fahrzeuge')]]")))
             rows = vehicle_table.find_elements(By.XPATH, ".//tbody/tr")
+            
+            # --- SCHRITT 1: VORAB-SCAN AUF FESTE FAHRZEUG-ANFORDERUNGEN ---
+            standard_vehicle_reqs = set()
             for row in rows:
                 cells = row.find_elements(By.TAG_NAME, 'td')
-                if len(cells) >= 2:
-                    requirement_text, count_text = cells[0].text.strip(), cells[1].text.strip().replace(" L", "")
-                    req_lower = requirement_text.lower()
-                    
-                    # Entferne zuerst den Text in Klammern für eine saubere Erkennung
-                    clean_requirement_text = requirement_text.split('(')[0].strip()
-                    req_lower_clean = clean_requirement_text.lower()
-                    
-                    skip = False
+                if len(cells) < 2: continue
+                requirement_text = cells[0].text.strip()
+                # Nur feste Anforderungen ohne Wahrscheinlichkeit berücksichtigen
+                if "anforderungswahrscheinlichkeit" not in requirement_text.lower():
+                    # Bereinige den Text, um den reinen Fahrzeugtyp zu erhalten
+                    clean_text = requirement_text.split('(')[0].strip().replace("Benötigte ", "")
+                    # Füge alle Optionen hinzu (für "oder"-Fälle)
+                    options = [opt.strip() for opt in clean_text.split(" oder ")] if " oder " in clean_text else [clean_text]
+                    for opt in options:
+                        standard_vehicle_reqs.add(opt)
 
-                    if "anforderungswahrscheinlichkeit" in req_lower:
-                        vehicle_type_needed = requirement_text.split("Anforderungswahrscheinlichkeit")[0].strip()
-                        if vehicle_type_needed in player_inventory:
-                            raw_requirements['fahrzeuge'].append([vehicle_type_needed])
-                            print(f"    -> Info: Wahrscheinlichkeits-Anforderung '{vehicle_type_needed}' als 1x Bedarf gewertet (Fahrzeug vorhanden).")
-                        else:
-                            skip = True
-                            print(f"    -> Info: Ignoriere Wahrscheinlichkeits-Anforderung '{vehicle_type_needed}' (Fahrzeug nicht im Bestand).")
+            # --- SCHRITT 2: FINALE VERARBEITUNG DER GESAMTEN LISTE ---
+            for row in rows:
+                cells = row.find_elements(By.TAG_NAME, 'td')
+                if len(cells) < 2: continue
+                requirement_text, count_text = cells[0].text.strip(), cells[1].text.strip().replace(" L", "")
+                req_lower = requirement_text.lower()
+
+                # Fall A: Wahrscheinlichkeits-Anforderung
+                if "anforderungswahrscheinlichkeit" in req_lower:
+                    vehicle_type_needed = requirement_text.split("Anforderungswahrscheinlichkeit")[0].strip()
                     
-                    if skip == True: 
-                        print("Continuing") 
+                    # PRÜFUNG AUF REDUNDANZ: Wenn das Fahrzeug schon fest gefordert wird, ignoriere diese Zeile.
+                    if vehicle_type_needed in standard_vehicle_reqs:
+                        print(f"    -> Info: Ignoriere redundante Wahrscheinlichkeits-Anforderung für '{vehicle_type_needed}'.")
                         continue
 
-                    # Spezifische Suchen zuerst
-                    if "schlauchwagen" in req_lower_clean:
-                        if count_text.isdigit():
-                            for _ in range(int(count_text)): raw_requirements['fahrzeuge'].append(["Schlauchwagen"])
-                    elif "schaummittel" in req_lower_clean or "sonderlöschmittelbedarf" in req_lower_clean:
-                        if count_text.isdigit(): raw_requirements['schaummittel'] += int(count_text)
-                    elif "feuerlöschpumpe" in req_lower_clean:
-                        if count_text.isdigit():
-                            for _ in range(int(count_text)): raw_requirements['fahrzeuge'].append(["Löschfahrzeug", "Tanklöschfahrzeug"])
-                    elif "personal" in req_lower_clean or "feuerwehrleute" in req_lower_clean:
-                        if count_text.isdigit(): raw_requirements['personal'] += int(count_text)
-                    elif "wasser" in req_lower_clean or "wasserbedarf" in req_lower_clean:
-                        if count_text.isdigit(): raw_requirements['wasser'] += int(count_text)
-                    # Allgemeiner Fall für Fahrzeuge
+                    # Wenn nicht redundant, dann wie bisher prüfen.
+                    if vehicle_type_needed in player_inventory:
+                        raw_requirements['fahrzeuge'].append([vehicle_type_needed])
+                        print(f"    -> Info: Zusätzliche Wahrscheinlichkeits-Anforderung '{vehicle_type_needed}' als Bedarf gewertet.")
                     else:
-                        if count_text.isdigit():
-                            clean_text = clean_requirement_text.replace("Benötigte ", "").strip()
-                            if " oder " in clean_text:
-                                options = [opt.strip() for opt in clean_text.split(" oder ")]
-                                for _ in range(int(count_text)): raw_requirements['fahrzeuge'].append(options)
-                            else:
-                                for _ in range(int(count_text)): raw_requirements['fahrzeuge'].append([clean_text])
-        except TimeoutException:
-            print("Info: Keine Fahrzeug-Anforderungstabelle gefunden.")
+                        print(f"    -> Info: Ignoriere zusätzliche Wahrscheinlichkeits-Anforderung '{vehicle_type_needed}' (nicht im Bestand).")
+                    continue
 
-        try: # Credits auslesen
+                # Fall B: Feste Anforderungen (Ressourcen und Fahrzeuge)
+                clean_requirement_text = requirement_text.split('(')[0].strip()
+                req_lower_clean = clean_requirement_text.lower()
+                
+                if "schlauchwagen" in req_lower_clean:
+                    if count_text.isdigit():
+                        for _ in range(int(count_text)): raw_requirements['fahrzeuge'].append(["Schlauchwagen"])
+                elif "schaummittel" in req_lower_clean or "sonderlöschmittelbedarf" in req_lower_clean:
+                    if count_text.isdigit(): raw_requirements['schaummittel'] += int(count_text)
+                elif "feuerlöschpumpe" in req_lower_clean:
+                    if count_text.isdigit():
+                        for _ in range(int(count_text)): raw_requirements['fahrzeuge'].append(["Löschfahrzeug", "Tanklöschfahrzeug"])
+                elif "personal" in req_lower_clean or "feuerwehrleute" in req_lower_clean:
+                    if count_text.isdigit(): raw_requirements['personal'] += int(count_text)
+                elif "wasser" in req_lower_clean or "wasserbedarf" in req_lower_clean:
+                    if count_text.isdigit(): raw_requirements['wasser'] += int(count_text)
+                else: # Allgemeiner Fall für feste Fahrzeug-Anforderungen
+                    if count_text.isdigit():
+                        clean_text = clean_requirement_text.replace("Benötigte ", "").strip()
+                        options = [opt.strip() for opt in clean_text.split(" oder ")] if " oder " in clean_text else [clean_text]
+                        for _ in range(int(count_text)): raw_requirements['fahrzeuge'].append(options)
+                        
+        except TimeoutException: print("Info: Keine Fahrzeug-Anforderungstabelle gefunden.")
+        try:
             credits_selector = "//td[normalize-space()='Credits im Durchschnitt']/following-sibling::td"
-            credits_element = driver.find_element(By.XPATH, credits_selector)
-            credits_text = credits_element.text.strip().replace(".", "").replace(",", "")
+            credits_text = driver.find_element(By.XPATH, credits_selector).text.strip().replace(".", "").replace(",", "")
             if credits_text.isdigit(): raw_requirements['credits'] = int(credits_text)
         except NoSuchElementException: pass
-
     except TimeoutException: return None
     finally:
         try: wait.until(EC.element_to_be_clickable((By.XPATH, "//a[text()='Zurück']"))).click()
         except: driver.refresh()
-            
     return raw_requirements
 
 def get_available_vehicles(driver, wait):
