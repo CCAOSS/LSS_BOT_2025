@@ -172,9 +172,8 @@ def setup_driver():
     
 def get_mission_requirements(driver, wait, player_inventory):
     """
-    **NEUE LOGIK V5:** Verhindert das Doppel-Zählen von Anforderungen, indem zuerst
-    feste Anforderungen identifiziert und redundante Wahrscheinlichkeits-Zeilen
-    danach ignoriert werden.
+    **FINALER FIX V6:** Implementiert eine radikal vereinfachte und direkte Logik,
+    um das "Ignorieren"-Problem endgültig zu lösen.
     """
     raw_requirements = {'fahrzeuge': [], 'personal': 0, 'wasser': 0, 'schaummittel': 0, 'credits': 0}
     try:
@@ -182,47 +181,29 @@ def get_mission_requirements(driver, wait, player_inventory):
         try:
             vehicle_table = wait.until(EC.visibility_of_element_located((By.XPATH, "//table[.//th[contains(text(), 'Fahrzeuge')]]")))
             rows = vehicle_table.find_elements(By.XPATH, ".//tbody/tr")
-            
-            # --- SCHRITT 1: VORAB-SCAN AUF FESTE FAHRZEUG-ANFORDERUNGEN ---
-            standard_vehicle_reqs = set()
-            for row in rows:
-                cells = row.find_elements(By.TAG_NAME, 'td')
-                if len(cells) < 2: continue
-                requirement_text = cells[0].text.strip()
-                # Nur feste Anforderungen ohne Wahrscheinlichkeit berücksichtigen
-                if "anforderungswahrscheinlichkeit" not in requirement_text.lower():
-                    # Bereinige den Text, um den reinen Fahrzeugtyp zu erhalten
-                    clean_text = requirement_text.split('(')[0].strip().replace("Benötigte ", "")
-                    # Füge alle Optionen hinzu (für "oder"-Fälle)
-                    options = [opt.strip() for opt in clean_text.split(" oder ")] if " oder " in clean_text else [clean_text]
-                    for opt in options:
-                        standard_vehicle_reqs.add(opt)
 
-            # --- SCHRITT 2: FINALE VERARBEITUNG DER GESAMTEN LISTE ---
             for row in rows:
                 cells = row.find_elements(By.TAG_NAME, 'td')
                 if len(cells) < 2: continue
-                requirement_text, count_text = cells[0].text.strip(), cells[1].text.strip().replace(" L", "")
+                
+                requirement_text = cells[0].text.strip()
+                count_text = cells[1].text.strip().replace(" L", "")
                 req_lower = requirement_text.lower()
 
-                # Fall A: Wahrscheinlichkeits-Anforderung
+                # --- NEUE, EINFACHE LOGIK ---
+                # Wenn es eine Wahrscheinlichkeits-Anforderung ist...
                 if "anforderungswahrscheinlichkeit" in req_lower:
                     vehicle_type_needed = requirement_text.split("Anforderungswahrscheinlichkeit")[0].strip()
                     
-                    # PRÜFUNG AUF REDUNDANZ: Wenn das Fahrzeug schon fest gefordert wird, ignoriere diese Zeile.
-                    if vehicle_type_needed in standard_vehicle_reqs:
-                        print(f"    -> Info: Ignoriere redundante Wahrscheinlichkeits-Anforderung für '{vehicle_type_needed}'.")
+                    # ...und du das Fahrzeug NICHT besitzt...
+                    if vehicle_type_needed not in player_inventory:
+                        print(f"    -> Info: Ignoriere Wahrscheinlichkeits-Anforderung '{vehicle_type_needed}' (nicht im Bestand).")
+                        # ...dann springe SOFORT zur nächsten Zeile. Garantiert keine weitere Verarbeitung.
                         continue
-
-                    # Wenn nicht redundant, dann wie bisher prüfen.
-                    if vehicle_type_needed in player_inventory:
-                        raw_requirements['fahrzeuge'].append([vehicle_type_needed])
-                        print(f"    -> Info: Zusätzliche Wahrscheinlichkeits-Anforderung '{vehicle_type_needed}' als Bedarf gewertet.")
-                    else:
-                        print(f"    -> Info: Ignoriere zusätzliche Wahrscheinlichkeits-Anforderung '{vehicle_type_needed}' (nicht im Bestand).")
-                    continue
-
-                # Fall B: Feste Anforderungen (Ressourcen und Fahrzeuge)
+                
+                # Alle anderen Zeilen (feste Anforderungen oder Wahrscheinlichkeiten für Fahrzeuge,
+                # die du besitzt) werden ganz normal weiterverarbeitet.
+                
                 clean_requirement_text = requirement_text.split('(')[0].strip()
                 req_lower_clean = clean_requirement_text.lower()
                 
@@ -238,12 +219,12 @@ def get_mission_requirements(driver, wait, player_inventory):
                     if count_text.isdigit(): raw_requirements['personal'] += int(count_text)
                 elif "wasser" in req_lower_clean or "wasserbedarf" in req_lower_clean:
                     if count_text.isdigit(): raw_requirements['wasser'] += int(count_text)
-                else: # Allgemeiner Fall für feste Fahrzeug-Anforderungen
+                else:
                     if count_text.isdigit():
                         clean_text = clean_requirement_text.replace("Benötigte ", "").strip()
                         options = [opt.strip() for opt in clean_text.split(" oder ")] if " oder " in clean_text else [clean_text]
                         for _ in range(int(count_text)): raw_requirements['fahrzeuge'].append(options)
-                        
+
         except TimeoutException: print("Info: Keine Fahrzeug-Anforderungstabelle gefunden.")
         try:
             credits_selector = "//td[normalize-space()='Credits im Durchschnitt']/following-sibling::td"
