@@ -172,21 +172,16 @@ def setup_driver():
     
 def get_mission_requirements(driver, wait, player_inventory):
     """
-    **FINALER FIX V8:** Fügt eine anpassbare Übersetzungs-Liste hinzu, um
-    Anforderungs-Namen (z.B. "Feuerwehrkran") auf die exakten Typen der
-    JSON-Datenbank (z.B. "FwK") zu mappen.
+    **FINALER BUGFIX V9:** Korrigiert einen Parsing-Fehler beim Extrahieren
+    des Fahrzeugnamens aus Wahrscheinlichkeits-Anforderungen.
     """
     
-    # --- ANPASSBARE ÜBERSETZUNGS-LISTE ---
-    # Füge hier alle Namen hinzu, die vom Spiel anders genannt werden als in deiner JSON-Datei.
-    # Format: "Name im Spiel": "Dein Name in der JSON-Datei"
+    # Die anpassbare Übersetzungs-Liste bleibt eine gute Idee für die Zukunft
     translation_map = {
         "Feuerwehrkran": "FwK",
-        "Drehleiter": "DLK 23/12", # Beispiel, falls deine DLK so heißt
-        "Rettungswagen": "RTW",   # Beispiel
-        # Füge hier bei Bedarf weitere Übersetzungen hinzu
+        "Drehleiter": "DLK 23/12",
+        "Rettungswagen": "RTW",
     }
-    # --- ENDE ANPASSBARE ÜBERSETZUNGS-LISTE ---
 
     raw_requirements = {'fahrzeuge': [], 'personal': 0, 'wasser': 0, 'schaummittel': 0, 'credits': 0}
     try:
@@ -200,10 +195,24 @@ def get_mission_requirements(driver, wait, player_inventory):
                 if len(cells) < 2: continue
                 
                 requirement_text, count_text = cells[0].text.strip(), cells[1].text.strip().replace(" L", "")
-                
-                # Bereinige den Text von Zusätzen wie "(...)"
+                req_lower = requirement_text.lower()
+
+                # --- START DER KORREKTUR ---
+                # Bevor wir irgendetwas tun, extrahieren wir den sauberen Namen
                 clean_requirement_text = requirement_text.split('(')[0].strip()
 
+                if "anforderungswahrscheinlichkeit" in req_lower:
+                    # Der Name ist bereits sauber extrahiert, keine weitere Aufteilung nötig.
+                    vehicle_type_needed = clean_requirement_text
+                    
+                    # Wende die Übersetzung an, FALLS nötig
+                    if vehicle_type_needed in translation_map:
+                        vehicle_type_needed = translation_map[vehicle_type_needed]
+
+                    if vehicle_type_needed not in player_inventory:
+                        print(f"    -> Info: Ignoriere Wahrscheinlichkeits-Anforderung '{vehicle_type_needed}' (nicht im Bestand).")
+                        continue
+                
                 # Plural -> Singular Logik
                 if clean_requirement_text.endswith("kräne"):
                     clean_requirement_text = clean_requirement_text.replace("kräne", "kran")
@@ -214,19 +223,10 @@ def get_mission_requirements(driver, wait, player_inventory):
                 elif clean_requirement_text.endswith("fahrzeuge"):
                      clean_requirement_text = clean_requirement_text.replace("fahrzeuge", "fahrzeug")
                 
-                # NEU: Wende die Übersetzung an
-                # Wenn der Name in der Map gefunden wird, ersetze ihn durch den Wert aus der Map
+                # Wende die Übersetzung an
                 if clean_requirement_text in translation_map:
                     clean_requirement_text = translation_map[clean_requirement_text]
 
-                # Ab hier wird nur noch mit dem finalen, korrekten Namen gearbeitet
-                req_lower = requirement_text.lower()
-                
-                if "anforderungswahrscheinlichkeit" in req_lower:
-                    if clean_requirement_text not in player_inventory:
-                        print(f"    -> Info: Ignoriere Wahrscheinlichkeits-Anforderung '{clean_requirement_text}' (nicht im Bestand).")
-                        continue
-                
                 req_lower_clean = clean_requirement_text.lower()
                 
                 if "schlauchwagen" in req_lower_clean:
