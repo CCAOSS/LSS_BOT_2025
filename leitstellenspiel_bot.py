@@ -58,7 +58,7 @@ if not VEHICLE_DATABASE:
     print("Bot wird beendet, da die Fahrzeug-Datenbank nicht geladen werden konnte."); time.sleep(10); sys.exit()
 
 # --- Bot-Konfiguration ---
-BOT_VERSION = "V6.1 - Final Logic"
+BOT_VERSION = "V6.2 - Final Logic"
 PAUSE_IF_NO_VEHICLES_SECONDS = 300
 MAX_START_DELAY_SECONDS = 3600
 MINIMUM_CREDITS = 10000
@@ -190,13 +190,19 @@ def get_mission_requirements(driver, wait, player_inventory):
                     clean_requirement_text = requirement_text.split('(')[0].strip()
                     req_lower_clean = clean_requirement_text.lower()
                     
+                    skip: False
+
                     if "anforderungswahrscheinlichkeit" in req_lower:
                         vehicle_type_needed = requirement_text.split("Anforderungswahrscheinlichkeit")[0].strip()
                         if vehicle_type_needed in player_inventory:
                             raw_requirements['fahrzeuge'].append([vehicle_type_needed])
                             print(f"    -> Info: Wahrscheinlichkeits-Anforderung '{vehicle_type_needed}' als 1x Bedarf gewertet (Fahrzeug vorhanden).")
                         else:
+                            skip = True
                             print(f"    -> Info: Ignoriere Wahrscheinlichkeits-Anforderung '{vehicle_type_needed}' (Fahrzeug nicht im Bestand).")
+                    
+                    if skip: 
+                        print("Continuing") 
                         continue
 
                     # Spezifische Suchen zuerst
