@@ -172,10 +172,22 @@ def setup_driver():
     
 def get_mission_requirements(driver, wait, player_inventory):
     """
-    **BUGFIX V7:** Behebt einen Parsing-Fehler, indem gängige Pluralformen
-    aus Einsatzanforderungen (z.B. "Feuerwehrkräne") in die korrekte Einzahl
-    ("Feuerwehrkran") umgewandelt werden.
+    **FINALER FIX V8:** Fügt eine anpassbare Übersetzungs-Liste hinzu, um
+    Anforderungs-Namen (z.B. "Feuerwehrkran") auf die exakten Typen der
+    JSON-Datenbank (z.B. "FwK") zu mappen.
     """
+    
+    # --- ANPASSBARE ÜBERSETZUNGS-LISTE ---
+    # Füge hier alle Namen hinzu, die vom Spiel anders genannt werden als in deiner JSON-Datei.
+    # Format: "Name im Spiel": "Dein Name in der JSON-Datei"
+    translation_map = {
+        "Feuerwehrkran": "FwK",
+        "Drehleiter": "DLK 23/12", # Beispiel, falls deine DLK so heißt
+        "Rettungswagen": "RTW",   # Beispiel
+        # Füge hier bei Bedarf weitere Übersetzungen hinzu
+    }
+    # --- ENDE ANPASSBARE ÜBERSETZUNGS-LISTE ---
+
     raw_requirements = {'fahrzeuge': [], 'personal': 0, 'wasser': 0, 'schaummittel': 0, 'credits': 0}
     try:
         wait.until(EC.element_to_be_clickable((By.XPATH, "//a[contains(text(), 'Hilfe')]"))).click()
@@ -188,18 +200,11 @@ def get_mission_requirements(driver, wait, player_inventory):
                 if len(cells) < 2: continue
                 
                 requirement_text, count_text = cells[0].text.strip(), cells[1].text.strip().replace(" L", "")
-                req_lower = requirement_text.lower()
-
-                if "anforderungswahrscheinlichkeit" in req_lower:
-                    vehicle_type_needed = requirement_text.split("Anforderungswahrscheinlichkeit")[0].strip()
-                    if vehicle_type_needed not in player_inventory:
-                        print(f"    -> Info: Ignoriere Wahrscheinlichkeits-Anforderung '{vehicle_type_needed}' (nicht im Bestand).")
-                        continue
                 
+                # Bereinige den Text von Zusätzen wie "(...)"
                 clean_requirement_text = requirement_text.split('(')[0].strip()
-                
-                # --- NEUE LOGIK ZUR PLURAL-ERKENNUNG ---
-                # Wandelt gängige Plural -> Singular um, bevor die Anforderung verarbeitet wird
+
+                # Plural -> Singular Logik
                 if clean_requirement_text.endswith("kräne"):
                     clean_requirement_text = clean_requirement_text.replace("kräne", "kran")
                 elif clean_requirement_text.endswith("wägen"):
@@ -208,7 +213,19 @@ def get_mission_requirements(driver, wait, player_inventory):
                      clean_requirement_text = clean_requirement_text.replace("leitern", "leiter")
                 elif clean_requirement_text.endswith("fahrzeuge"):
                      clean_requirement_text = clean_requirement_text.replace("fahrzeuge", "fahrzeug")
-                # --- ENDE NEUE LOGIK ---
+                
+                # NEU: Wende die Übersetzung an
+                # Wenn der Name in der Map gefunden wird, ersetze ihn durch den Wert aus der Map
+                if clean_requirement_text in translation_map:
+                    clean_requirement_text = translation_map[clean_requirement_text]
+
+                # Ab hier wird nur noch mit dem finalen, korrekten Namen gearbeitet
+                req_lower = requirement_text.lower()
+                
+                if "anforderungswahrscheinlichkeit" in req_lower:
+                    if clean_requirement_text not in player_inventory:
+                        print(f"    -> Info: Ignoriere Wahrscheinlichkeits-Anforderung '{clean_requirement_text}' (nicht im Bestand).")
+                        continue
                 
                 req_lower_clean = clean_requirement_text.lower()
                 
@@ -226,11 +243,11 @@ def get_mission_requirements(driver, wait, player_inventory):
                     if count_text.isdigit(): raw_requirements['wasser'] += int(count_text)
                 else:
                     if count_text.isdigit():
-                        clean_text = clean_requirement_text.replace("Benötigte ", "").strip()
-                        options = [opt.strip() for opt in clean_text.split(" oder ")] if " oder " in clean_text else [clean_text]
+                        final_text = clean_requirement_text.replace("Benötigte ", "").strip()
+                        options = [opt.strip() for opt in final_text.split(" oder ")] if " oder " in final_text else [final_text]
                         for _ in range(int(count_text)): raw_requirements['fahrzeuge'].append(options)
 
-        except TimeoutException: print("Info: Keine Fahrzeug-Anforderungstabelle gefunden.")
+        except TimeoutException: print("Info: Keine Fahrzeug-Anforderungstabellen gefunden.")
         try:
             credits_selector = "//td[normalize-space()='Credits im Durchschnitt']/following-sibling::td"
             credits_text = driver.find_element(By.XPATH, credits_selector).text.strip().replace(".", "").replace(",", "")
