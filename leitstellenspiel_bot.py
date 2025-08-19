@@ -176,9 +176,8 @@ def setup_driver():
     
 def get_mission_requirements(driver, wait, player_inventory):
     """
-    **FINALE VERSION (DEINE LOGIK):** Löst das Timing-Problem, indem nach
-    einer fehlgeschlagenen Wahrscheinlichkeits-Prüfung die bereits hinzugefügten
-    Anforderungen für dieses Fahrzeug nachträglich wieder entfernt werden.
+    **DEBUG-VERSION:** Fügt detaillierte Debug-Ausgaben hinzu, um zu sehen,
+    warum der Vergleich beim Entfernen der Anforderungen fehlschlägt.
     """
     
     # --- ANPASSBARE ÜBERSETZUNGS-LISTE ---
@@ -220,8 +219,9 @@ def get_mission_requirements(driver, wait, player_inventory):
             prob_vehicles_to_check = set()
             for item in collected_data:
                 if item['is_prob']:
-                    prob_name = normalize_name(item['text'])
-                    prob_vehicles_to_check.add(prob_name)
+                    prob_name = item['text'].split('(')[0].strip()
+                    normalized_prob_name = normalize_name(prob_name)
+                    prob_vehicles_to_check.add(normalized_prob_name)
                     continue
 
                 clean_name = item['text'].split('(')[0].strip().replace("Benötigte ", "")
@@ -251,7 +251,12 @@ def get_mission_requirements(driver, wait, player_inventory):
                 if vehicle_name not in player_inventory:
                     print(f"    -> Info: Anforderung '{vehicle_name}' wird ignoriert (Wahrscheinlichkeit & nicht im Bestand).")
                     
-                    # DEINE LOGIK: Suche und lösche alle Vorkommen dieses Fahrzeugs
+                    # --- NEUE DEBUG-AUSGABEN ---
+                    print(f"    DEBUG: Suche nach '{vehicle_name}' zum Entfernen.")
+                    for req_list in raw_requirements['fahrzeuge']:
+                        print(f"    DEBUG: Vergleiche mit {req_list}")
+                    # --- ENDE DEBUG-AUSGABEN ---
+
                     original_count = len(raw_requirements['fahrzeuge'])
                     cleaned_fahrzeuge = [req_list for req_list in raw_requirements['fahrzeuge'] if vehicle_name not in req_list]
                     
