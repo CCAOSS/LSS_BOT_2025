@@ -570,36 +570,42 @@ def load_vehicle_id_map(file_path=resource_path("vehicle_id.json")):
 # Ersetze die alte Funktion komplett durch diese neue Version
 def get_player_vehicle_inventory(driver, wait):
     """
-    **NEUE LOGIK:** Liest den Fuhrpark aus, indem es die 'vehicle_type_id' ausliest
-    und über die 'vehicle_id.json' in den korrekten Fahrzeugnamen umwandelt.
+    **KORRIGIERT:** Timeout behoben. Liest die 'vehicle_type_id' jetzt
+    korrekt vom <img>-Tag innerhalb jeder Tabellenzeile aus.
     """
     print("Info: Lese den kompletten Fuhrpark (Inventar) ein...")
     
     vehicle_id_map = load_vehicle_id_map()
     if not vehicle_id_map:
         print("WARNUNG: Fahrzeug-ID-Map konnte nicht geladen werden. Inventarprüfung wird ungenau sein.")
-        return set() # Gebe ein leeres Set zurück, um einen Absturz zu vermeiden
+        return set()
 
     inventory = set()
     try:
         driver.get("https://www.leitstellenspiel.de/vehicles")
         
+        # Warte einfach auf die Tabellenzeilen, ohne ein spezielles Attribut zu fordern
         vehicle_rows = wait.until(EC.presence_of_all_elements_located((By.XPATH, "//tbody/tr")))
-        print(f"Info: {len(vehicle_rows)} Fahrzeuge im Fuhrpark gefunden. Analysiere Typen...")
+        print(f"Info: {len(vehicle_rows)} Zeilen in der Fahrzeugtabelle gefunden. Analysiere...")
 
         for row in vehicle_rows:
-            # Lese die Fahrzeug-ID aus dem 'data-vehicle-type-id'-Attribut
-            vehicle_id = row.get_attribute('data-vehicle-type-id')
-            
-            if vehicle_id:
-                # Finde den passenden Namen in unserer ID-Map
-                vehicle_name = vehicle_id_map.get(vehicle_id)
-                if vehicle_name:
-                    inventory.add(vehicle_name)
-                else:
-                    print(f"Warnung: Unbekannte Fahrzeug-ID '{vehicle_id}' im Inventar gefunden.")
+            try:
+                # SUCHE das <img>-Tag INNERHALB der aktuellen Zeile und lies dort das Attribut aus.
+                image_tag = row.find_element(By.XPATH, ".//img[@vehicle_type_id]")
+                vehicle_id = image_tag.get_attribute('vehicle_type_id')
+                
+                if vehicle_id:
+                    # Finde den passenden Namen in unserer ID-Map
+                    vehicle_name = vehicle_id_map.get(vehicle_id)
+                    if vehicle_name:
+                        inventory.add(vehicle_name)
+                    else:
+                        print(f"Warnung: Unbekannte Fahrzeug-ID '{vehicle_id}' im Inventar gefunden.")
+            except NoSuchElementException:
+                # Ignoriere Zeilen, die kein passendes <img>-Tag haben (z.B. Kopfzeilen, Trenner)
+                continue
         
-        print(f"Info: Inventar mit {len(inventory)} einzigartigen Fahrzeugtypen erfolgreich erstellt.")
+        print(f"Info: Inventar mit {len(inventory)} einzigartigen Fahrzeugtypen erfolgreich erstellt: {inventory}")
         
     except Exception as e:
         print(f"FEHLER: Konnte den Fuhrpark nicht einlesen: {e}")
