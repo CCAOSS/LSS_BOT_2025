@@ -176,8 +176,9 @@ def setup_driver():
     
 def get_mission_requirements(driver, wait, player_inventory):
     """
-    **BUGFIX V14:** Behebt den Logikfehler im Zwei-Phasen-Scan, indem sichergestellt
-    wird, dass Fahrzeugnamen vor dem Vergleich identisch bereinigt und übersetzt werden.
+    **BUGFIX V15 (DEINE LOGIK):** Wenn eine Wahrscheinlichkeits-Prüfung fehlschlägt,
+    werden bereits hinzugefügte Einträge für dieses Fahrzeug nachträglich aus der
+    Anforderungsliste entfernt, um Timing-Probleme zu beheben.
     """
     
     # --- ANPASSBARE ÜBERSETZUNGS-LISTE ---
@@ -188,6 +189,7 @@ def get_mission_requirements(driver, wait, player_inventory):
         "Löschfahrzeuge": "Löschfahrzeug",
         "Rüstwagen": "RW",
         "Gerätewagen Öl": "GW-Öl",
+        "GW-Höhenrettung": "GW-HÖ" 
     }
     # --- ENDE ANPASSBARE ÜBERSETZUNGS-LISTE ---
 
@@ -200,77 +202,64 @@ def get_mission_requirements(driver, wait, player_inventory):
 
             # Hilfsfunktion, um Namen konsistent zu bereinigen und zu übersetzen
             def normalize_name(name):
-                # Von "(...)" befreien
                 clean = name.split('(')[0].strip().replace("Benötigte ", "")
-                # Plural -> Singular
                 if clean.endswith("kräne"): clean = clean.replace("kräne", "kran")
                 elif clean.endswith("wägen"): clean = clean.replace("wägen", "wagen")
                 elif clean.endswith("leitern"): clean = clean.replace("leitern", "leiter")
-                # Übersetzen
                 return translation_map.get(clean, clean)
 
-            # --- PHASE 1: Vorab-Scan, um alle festen Anforderungen zu identifizieren ---
-            hard_requirements_set = set()
-            for row in rows:
-                cells = row.find_elements(By.TAG_NAME, 'td')
-                if len(cells) < 2: continue
-                requirement_text = cells[0].text.strip()
-                if "anforderungswahrscheinlichkeit" not in requirement_text.lower():
-                    # Zerlege auch hier komplexe Anforderungen
-                    base_name = requirement_text.split('(')[0].strip().replace("Benötigte ", "")
-                    options_text = [p.strip() for p in base_name.replace(",", " oder ").split(" oder ")]
-                    for option in options_text:
-                        if option:
-                            # BENUTZE DIE HELFSFUNKTION FÜR KONSISTENZ
-                            normalized = normalize_name(option)
-                            hard_requirements_set.add(normalized)
-            
-            # --- PHASE 2: Komplette Verarbeitung mit dem Wissen aus Phase 1 ---
+            # --- VERARBEITUNG IN EINEM DURCHGANG ---
+            all_rows_data = []
             for row in rows:
                 cells = row.find_elements(By.TAG_NAME, 'td')
                 if len(cells) < 2: continue
                 requirement_text, count_text = cells[0].text.strip(), cells[1].text.strip().replace(" L", "")
+                all_rows_data.append({'text': requirement_text, 'count': count_text})
+
+            # Zuerst alle festen Anforderungen hinzufügen
+            for item in all_rows_data:
+                if "anforderungswahrscheinlichkeit" in item['text'].lower():
+                    continue # Überspringe Wahrscheinlichkeiten in dieser ersten Runde
                 
-                # --- Wahrscheinlichkeits-Logik ---
-                if "anforderungswahrscheinlichkeit" in requirement_text.lower():
-                    prob_name_raw = requirement_text.split('(')[0].strip()
-                    
-                    # BENUTZE DIE GLEICHE HELFSFUNKTION WIE IN PHASE 1
-                    prob_name_normalized = normalize_name(prob_name_raw)
+                # Feste Anforderungen verarbeiten (Fahrzeuge & Ressourcen)
+                clean_name = item['text'].split('(')[0].strip().replace("Benötigte ", "")
+                req_lower_clean = clean_name.lower()
 
-                    if prob_name_normalized in hard_requirements_set:
-                        print(f"    -> Info: Ignoriere redundante Wahrscheinlichkeits-Anforderung für '{prob_name_raw}'.")
-                        continue
-                    
-                    if prob_name_normalized not in player_inventory:
-                        print(f"    -> Info: Ignoriere einzigartige Wahrscheinlichkeits-Anforderung für '{prob_name_normalized}' (nicht im Bestand).")
-                        continue
-                    else:
-                         raw_requirements['fahrzeuge'].append([prob_name_normalized])
-                         print(f"    -> Info: Füge einzigartige Wahrscheinlichkeits-Anforderung für '{prob_name_normalized}' hinzu (im Bestand).")
-
-                # --- Feste Anforderungen (Fahrzeuge & Ressourcen) ---
+                if any(keyword in req_lower_clean for keyword in ["personal", "feuerwehrleute", "wasser", "schaummittel"]):
+                    if "personal" in req_lower_clean or "feuerwehrleute" in req_lower_clean:
+                        if item['count'].isdigit(): raw_requirements['personal'] += int(item['count'])
+                    elif "wasser" in req_lower_clean:
+                        if item['count'].isdigit(): raw_requirements['wasser'] += int(item['count'])
+                    elif "schaummittel" in req_lower_clean:
+                        if item['count'].isdigit(): raw_requirements['schaummittel'] += int(item['count'])
                 else:
-                    clean_name = requirement_text.split('(')[0].strip().replace("Benötigte ", "")
-                    if any(keyword in clean_name.lower() for keyword in ["personal", "feuerwehrleute", "wasser", "schaummittel"]):
-                        # ... (Ressourcen-Logik bleibt unverändert)
-                        req_lower_clean = clean_name.lower()
-                        if "personal" in req_lower_clean or "feuerwehrleute" in req_lower_clean:
-                            if count_text.isdigit(): raw_requirements['personal'] += int(count_text)
-                        elif "wasser" in req_lower_clean:
-                            if count_text.isdigit(): raw_requirements['wasser'] += int(count_text)
-                        elif "schaummittel" in req_lower_clean:
-                            if count_text.isdigit(): raw_requirements['schaummittel'] += int(count_text)
-                        continue
-                    
                     # Verarbeite komplexe Fahrzeuganforderungen
                     options_text = [p.strip() for p in clean_name.replace(",", " oder ").split(" oder ")]
                     final_options = [normalize_name(opt) for opt in options_text if opt]
-                    
-                    if count_text.isdigit() and final_options:
-                        for _ in range(int(count_text)):
+                    if item['count'].isdigit() and final_options:
+                        for _ in range(int(item['count'])):
                             raw_requirements['fahrzeuge'].append(final_options)
 
+            # --- JETZT DIE WAHRSCHEINLICHKEITEN PRÜFEN UND Ggf. BEREINIGEN ---
+            for item in all_rows_data:
+                if "anforderungswahrscheinlichkeit" in item['text'].lower():
+                    prob_name_raw = item['text'].split('(')[0].strip()
+                    prob_name_normalized = normalize_name(prob_name_raw)
+
+                    if prob_name_normalized not in player_inventory:
+                        print(f"    -> Info: Ignoriere Anforderung '{prob_name_normalized}' (nicht im Bestand).")
+                        
+                        # DEINE LOGIK: Suche und lösche alle Vorkommen dieses Fahrzeugs
+                        # Wir erstellen eine neue Liste, die alle Einträge enthält, außer dem zu löschenden.
+                        cleaned_fahrzeuge = []
+                        for req_option_list in raw_requirements['fahrzeuge']:
+                            if prob_name_normalized not in req_option_list:
+                                cleaned_fahrzeuge.append(req_option_list)
+                        
+                        if len(raw_requirements['fahrzeuge']) != len(cleaned_fahrzeuge):
+                            print(f"    -> Korrektur: '{prob_name_normalized}' wird aus der Anforderungsliste entfernt.")
+                            raw_requirements['fahrzeuge'] = cleaned_fahrzeuge
+            
         except TimeoutException: print("Info: Keine Fahrzeug-Anforderungstabellen gefunden.")
         
         try:
