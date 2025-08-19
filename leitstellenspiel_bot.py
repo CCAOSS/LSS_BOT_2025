@@ -220,8 +220,10 @@ def get_mission_requirements(driver, wait, player_inventory):
             for item in collected_data:
                 # Store all probability vehicles for a final check
                 if item['is_prob']:
-                    prob_name = normalize_name(item['text'])
-                    prob_vehicles_to_check.add(prob_name)
+                    # **KORREKTUR HIER:** Der Name wird jetzt richtig extrahiert
+                    prob_name = item['text'].split('(')[0].strip()
+                    normalized_prob_name = normalize_name(prob_name)
+                    prob_vehicles_to_check.add(normalized_prob_name)
 
                 # Process hard requirements immediately
                 else:
