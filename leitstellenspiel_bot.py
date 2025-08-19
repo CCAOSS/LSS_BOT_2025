@@ -172,8 +172,8 @@ def setup_driver():
     
 def get_mission_requirements(driver, wait, player_inventory):
     """
-    **BUGFIX V11:** Stellt die entfernte Logik zur Zählung von Personal,
-    Wasser und Schaummittel wieder her.
+    **BUGFIX V12:** Verbessert das Parsing für komplexe Anforderungen,
+    die sowohl Kommas als auch "oder" enthalten.
     """
     
     # --- ANPASSBARE ÜBERSETZUNGS-LISTE ---
@@ -181,6 +181,9 @@ def get_mission_requirements(driver, wait, player_inventory):
         "Feuerwehrkran": "FwK",
         "Drehleiter": "DLK 23/12",
         "Rettungswagen": "RTW",
+        "Löschfahrzeuge": "Löschfahrzeug", # Plural-Formen hier hinzufügen
+        "Rüstwagen": "RW",             # Beispiel, falls du RW nutzt
+        "Gerätewagen Öl": "GW-Öl",       # Beispiel
     }
     # --- ENDE ANPASSBARE ÜBERSETZUNGS-LISTE ---
 
@@ -197,46 +200,56 @@ def get_mission_requirements(driver, wait, player_inventory):
                 
                 requirement_text, count_text = cells[0].text.strip(), cells[1].text.strip().replace(" L", "")
                 
-                clean_name = requirement_text.split('(')[0].strip()
+                clean_name = requirement_text.split('(')[0].strip().replace("Benötigte ", "")
 
-                if clean_name.endswith("kräne"):
-                    clean_name = clean_name.replace("kräne", "kran")
-                
-                final_name = translation_map.get(clean_name, clean_name)
-                
-                req_lower = requirement_text.lower()
-                
-                if "anforderungswahrscheinlichkeit" in req_lower:
-                    if final_name not in player_inventory:
-                        print(f"    -> Info: Ignoriere Wahrscheinlichkeits-Anforderung für '{final_name}' (nicht im Bestand).")
+                # Wahrscheinlichkeits-Anforderung prüfen, bevor wir den Text weiter zerlegen
+                is_probability_req = "anforderungswahrscheinlichkeit" in requirement_text.lower()
+                if is_probability_req:
+                    translated_name = translation_map.get(clean_name, clean_name)
+                    if translated_name not in player_inventory:
+                        print(f"    -> Info: Ignoriere Wahrscheinlichkeits-Anforderung für '{translated_name}' (nicht im Bestand).")
                         continue
                 
-                # --- WIEDERHERGESTELLTE LOGIK FÜR PERSONAL & RESSOURCEN ---
-                req_lower_clean = final_name.lower()
-                
-                if "personal" in req_lower_clean or "feuerwehrleute" in req_lower_clean:
-                    if count_text.isdigit():
-                        raw_requirements['personal'] += int(count_text)
-                        continue # Wichtig, um nicht als Fahrzeug gezählt zu werden
-                elif "wasser" in req_lower_clean:
-                    if count_text.isdigit():
-                        raw_requirements['wasser'] += int(count_text)
-                        continue
-                elif "schaummittel" in req_lower_clean:
-                    if count_text.isdigit():
-                        raw_requirements['schaummittel'] += int(count_text)
-                        continue
-                # --- ENDE WIEDERHERGESTELLTE LOGIK ---
+                # --- NEUE LOGIK FÜR KOMPLEXE ANFORDERUNGEN ---
+                options = []
+                # Zuerst nach "oder" aufteilen
+                parts = [p.strip() for p in clean_name.split(" oder ")]
+                for part in parts:
+                    # Dann jeden Teil nach Kommas aufteilen
+                    sub_parts = [sp.strip() for sp in part.split(",")]
+                    options.extend(sub_parts)
 
-                # Feste Fahrzeug-Anforderungen verarbeiten
+                # Bereinige und übersetze jede einzelne Option
+                final_options = []
+                for option in options:
+                    # Plural-Logik anwenden
+                    if option.endswith("kräne"): option = option.replace("kräne", "kran")
+                    elif option.endswith("wägen"): option = option.replace("wägen", "wagen")
+                    elif option.endswith("leitern"): option = option.replace("leitern", "leiter")
+                    
+                    # Übersetzung anwenden
+                    translated_option = translation_map.get(option, option)
+                    final_options.append(translated_option)
+                # --- ENDE NEUE LOGIK ---
+
+                # Ressourcen (Personal, Wasser etc.) separat behandeln
+                req_lower_clean = clean_name.lower()
+                if any(keyword in req_lower_clean for keyword in ["personal", "feuerwehrleute", "wasser", "schaummittel"]):
+                    if "personal" in req_lower_clean or "feuerwehrleute" in req_lower_clean:
+                        if count_text.isdigit(): raw_requirements['personal'] += int(count_text)
+                    elif "wasser" in req_lower_clean:
+                        if count_text.isdigit(): raw_requirements['wasser'] += int(count_text)
+                    elif "schaummittel" in req_lower_clean:
+                        if count_text.isdigit(): raw_requirements['schaummittel'] += int(count_text)
+                    continue # Zur nächsten Zeile springen, da Ressource verarbeitet wurde
+
+                # Fahrzeug-Anforderungen zur Liste hinzufügen
                 if count_text.isdigit():
-                    options = [opt.strip() for opt in final_name.split(" oder ")] if " oder " in final_name else [final_name]
                     for _ in range(int(count_text)):
-                        raw_requirements['fahrzeuge'].append(options)
+                        raw_requirements['fahrzeuge'].append(final_options)
 
         except TimeoutException: print("Info: Keine Fahrzeug-Anforderungstabellen gefunden.")
         
-        # Credits-Anforderung (war vorher auch auskommentiert)
         try:
             credits_selector = "//td[normalize-space()='Credits im Durchschnitt']/following-sibling::td"
             credits_text = driver.find_element(By.XPATH, credits_selector).text.strip().replace(".", "").replace(",", "")
