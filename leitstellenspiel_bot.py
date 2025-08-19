@@ -176,9 +176,8 @@ def setup_driver():
     
 def get_mission_requirements(driver, wait, player_inventory):
     """
-    **FINALER FIX V17:** Löst das Problem durch eine saubere Zwei-Phasen-Logik,
-    die sicherstellt, dass Wahrscheinlichkeits-Anforderungen NUR dann berücksichtigt
-    werden, wenn das Fahrzeug im Inventar vorhanden ist.
+    **FINAL FIX:** A radically simplified single-pass logic to definitively
+    resolve the requirement parsing and inventory check issues.
     """
     
     # --- ANPASSBARE ÜBERSETZUNGS-LISTE ---
@@ -207,57 +206,44 @@ def get_mission_requirements(driver, wait, player_inventory):
                 elif clean.endswith("leitern"): clean = clean.replace("leitern", "leiter")
                 return translation_map.get(clean, clean)
 
-            # --- PHASE 1: Alle Anforderungen sammeln und ihren Typ (fest/prob) vermerken ---
-            collected_reqs = {}
+            # --- EINZIGE, DIREKTE VERARBEITUNGSSCHLEIFE ---
             for row in rows:
                 cells = row.find_elements(By.TAG_NAME, 'td')
                 if len(cells) < 2: continue
                 
                 requirement_text, count_text = cells[0].text.strip(), cells[1].text.strip().replace(" L", "")
-                is_prob = "anforderungswahrscheinlichkeit" in requirement_text.lower()
                 
+                is_probability_req = "anforderungswahrscheinlichkeit" in requirement_text.lower()
+                
+                # Schritt 1: Namen IMMER zuerst bereinigen und übersetzen
                 clean_name = requirement_text.split('(')[0].strip().replace("Benötigte ", "")
                 
-                # Ressourcen direkt verarbeiten
-                if any(keyword in clean_name.lower() for keyword in ["personal", "feuerwehrleute", "wasser", "schaummittel"]):
-                    if "personal" in clean_name.lower() or "feuerwehrleute" in clean_name.lower():
+                # Schritt 2: Endgültige Entscheidung für Wahrscheinlichkeits-Anforderungen
+                if is_probability_req:
+                    normalized_name = normalize_name(clean_name)
+                    if normalized_name not in player_inventory:
+                        print(f"    -> Info: Ignoriere Wahrscheinlichkeits-Anforderung für '{normalized_name}' (nicht im Bestand).")
+                        continue # ENDGÜLTIG: Springe zur nächsten Zeile.
+                
+                # Schritt 3: Verarbeite die Anforderung (entweder als Ressource oder als Fahrzeug)
+                req_lower_clean = clean_name.lower()
+                
+                # Ist es eine Ressource?
+                if any(keyword in req_lower_clean for keyword in ["personal", "feuerwehrleute", "wasser", "schaummittel"]):
+                    if "personal" in req_lower_clean or "feuerwehrleute" in req_lower_clean:
                         if count_text.isdigit(): raw_requirements['personal'] += int(count_text)
-                    elif "wasser" in clean_name.lower():
+                    elif "wasser" in req_lower_clean:
                         if count_text.isdigit(): raw_requirements['wasser'] += int(count_text)
-                    elif "schaummittel" in clean_name.lower():
+                    elif "schaummittel" in req_lower_clean:
                         if count_text.isdigit(): raw_requirements['schaummittel'] += int(count_text)
-                    continue
-
-                # Fahrzeuganforderungen sammeln
-                options_text = [p.strip() for p in clean_name.replace(",", " oder ").split(" oder ")]
-                final_options = tuple(sorted([normalize_name(opt) for opt in options_text if opt])) # Tupel als Key für das Dictionary
-
-                if not final_options: continue
                 
-                # Zähle, wie oft diese Anforderung vorkommt
-                count = int(count_text) if count_text.isdigit() else 0
-                
-                if final_options not in collected_reqs:
-                    collected_reqs[final_options] = {'count': 0, 'is_prob': True} # Starte mit Annahme "is_prob"
-                
-                collected_reqs[final_options]['count'] += count
-                if not is_prob:
-                    collected_reqs[final_options]['is_prob'] = False # Eine feste Anforderung überschreibt immer eine Wahrscheinlichkeit
-
-            # --- PHASE 2: Endgültige Anforderungsliste basierend auf den gesammelten Daten erstellen ---
-            for options, data in collected_reqs.items():
-                is_hard_req = not data['is_prob']
-                
-                # Prüfe, ob ALLE Optionen der Anforderung im Inventar sind (wichtig für Wahrscheinlichkeiten)
-                owned = all(opt in player_inventory for opt in options)
-
-                if is_hard_req or (data['is_prob'] and owned):
-                    # Anforderung hinzufügen
-                    for _ in range(data['count']):
-                        raw_requirements['fahrzeuge'].append(list(options))
+                # Wenn es keine Ressource ist, muss es ein Fahrzeug sein
                 else:
-                    # Anforderung ignorieren
-                    print(f"    -> Info: Ignoriere Anforderung '{'/'.join(options)}' (Wahrscheinlichkeit & nicht im Bestand).")
+                    options_text = [p.strip() for p in clean_name.replace(",", " oder ").split(" oder ")]
+                    final_options = [normalize_name(opt) for opt in options_text if opt]
+                    if count_text.isdigit() and final_options:
+                        for _ in range(int(count_text)):
+                            raw_requirements['fahrzeuge'].append(final_options)
 
         except TimeoutException: print("Info: Keine Fahrzeug-Anforderungstabellen gefunden.")
         
