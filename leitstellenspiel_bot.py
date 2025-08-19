@@ -186,7 +186,6 @@ def get_mission_requirements(driver, wait, player_inventory, given_patients):
         "Drehleitern": "Drehleiter",
         "Rettungswagen": "RTW",
         "Löschfahrzeuge": "Löschfahrzeug",
-        "Rüstwagen": "RW",
         "Gerätewagen Öl": "GW-Öl",
     }
     # --- ENDE ANPASSBARE ÜBERSETZUNGS-LISTE ---
