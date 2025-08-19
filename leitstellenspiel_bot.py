@@ -188,7 +188,6 @@ def get_mission_requirements(driver, wait, player_inventory):
         "Löschfahrzeuge": "Löschfahrzeug",
         "Rüstwagen": "RW",
         "Gerätewagen Öl": "GW-Öl",
-        "GW-Höhenrettung": "GW-HÖ" # Beispiel für eine weitere Abkürzung
     }
     # --- ENDE ANPASSBARE ÜBERSETZUNGS-LISTE ---
 
