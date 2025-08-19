@@ -176,10 +176,10 @@ def setup_driver():
     
 def get_mission_requirements(driver, wait, player_inventory):
     """
-    **DEBUG-VERSION V2:** Fügt die entscheidenden Debug-Ausgaben wieder hinzu,
-    um den Fehler beim Abgleich exakt zu identifizieren.
+    **DEBUG-VERSION:** Enthält detaillierte Ausgaben, um den finalen
+    Entscheidungsprozess transparent zu machen.
     """
-
+    
     # --- ANPASSBARE ÜBERSETZUNGS-LISTE ---
     translation_map = {
         "Feuerwehrkran": "FwK",
@@ -188,6 +188,7 @@ def get_mission_requirements(driver, wait, player_inventory):
         "Löschfahrzeuge": "Löschfahrzeug",
         "Rüstwagen": "RW",
         "Gerätewagen Öl": "GW-Öl",
+        # "GW-Höhenrettung": "GW-HÖ"  <-- Unnötiger Eintrag entfernt
     }
     # --- ENDE ANPASSBARE ÜBERSETZUNGS-LISTE ---
 
@@ -205,61 +206,70 @@ def get_mission_requirements(driver, wait, player_inventory):
                 elif clean.endswith("leitern"): clean = clean.replace("leitern", "leiter")
                 return translation_map.get(clean, clean)
 
-            collected_data = []
+            # --- PHASE 1: Alle Anforderungen sammeln und klassifizieren ---
+            requirements_dict = {}
             for row in rows:
                 cells = row.find_elements(By.TAG_NAME, 'td')
                 if len(cells) < 2: continue
+                
                 requirement_text, count_text = cells[0].text.strip(), cells[1].text.strip().replace(" L", "")
                 is_prob = "anforderungswahrscheinlichkeit" in requirement_text.lower()
-                collected_data.append({'text': requirement_text, 'count': count_text, 'is_prob': is_prob})
-
-            prob_vehicles_to_check = set()
-            for item in collected_data:
-                if item['is_prob']:
-                    prob_name = normalize_name(item['text'])
-                    prob_vehicles_to_check.add(prob_name)
-                    continue
-
-                clean_name = item['text'].split('(')[0].strip().replace("Benötigte ", "")
-                req_lower_clean = clean_name.lower()
+                clean_name = requirement_text.split('(')[0].strip().replace("Benötigte ", "")
                 
-                if any(keyword in req_lower_clean for keyword in ["personal", "feuerwehrleute", "wasser", "schaummittel", "feuerlöschpumpe"]):
-                    if "personal" in req_lower_clean or "feuerwehrleute" in req_lower_clean:
-                        if item['count'].isdigit(): raw_requirements['personal'] += int(item['count'])
-                    elif "wasser" in req_lower_clean:
-                        if item['count'].isdigit(): raw_requirements['wasser'] += int(item['count'])
-                    elif "schaummittel" in req_lower_clean:
-                        if item['count'].isdigit(): raw_requirements['schaummittel'] += int(item['count'])
-                    elif "feuerlöschpumpe" in req_lower_clean:
-                        if item['count'].isdigit():
-                            for _ in range(int(item['count'])):
+                if any(keyword in clean_name.lower() for keyword in ["personal", "feuerwehrleute", "wasser", "schaummittel", "feuerlöschpumpe"]):
+                    if "personal" in clean_name.lower() or "feuerwehrleute" in clean_name.lower():
+                        if count_text.isdigit(): raw_requirements['personal'] += int(count_text)
+                    elif "wasser" in clean_name.lower():
+                        if count_text.isdigit(): raw_requirements['wasser'] += int(count_text)
+                    elif "schaummittel" in clean_name.lower():
+                        if count_text.isdigit(): raw_requirements['schaummittel'] += int(count_text)
+                    elif "feuerlöschpumpe" in clean_name.lower():
+                        if count_text.isdigit():
+                            for _ in range(int(count_text)):
                                 raw_requirements['fahrzeuge'].append(["Löschfahrzeug", "Tanklöschfahrzeug"])
                     continue
 
                 options_text = [p.strip() for p in clean_name.replace(",", " oder ").split(" oder ")]
-                final_options = [normalize_name(opt) for opt in options_text if opt]
-                if item['count'].isdigit() and final_options:
-                    for _ in range(int(item['count'])):
-                        raw_requirements['fahrzeuge'].append(final_options)
-            
-            for vehicle_name in prob_vehicles_to_check:
-                if vehicle_name not in player_inventory:
-                    print(f"    -> Info: Anforderung '{vehicle_name}' wird ignoriert (Wahrscheinlichkeit & nicht im Bestand).")
-                    
-                    ### HIER SIND DIE DEBUG-AUSGABEN WIEDER AKTIVIERT ###
-                    print(f"    DEBUG: Suche nach '{vehicle_name}' zum Entfernen.")
-                    print(f"    DEBUG: Aktuelle Anforderungsliste: {raw_requirements['fahrzeuge']}")
-                    
-                    original_count = len(raw_requirements['fahrzeuge'])
-                    cleaned_fahrzeuge = [req_list for req_list in raw_requirements['fahrzeuge'] if vehicle_name not in req_list]
-                    
-                    if original_count != len(cleaned_fahrzeuge):
-                        print(f"    -> Korrektur: '{vehicle_name}' wird aus der Anforderungsliste entfernt.")
-                        raw_requirements['fahrzeuge'] = cleaned_fahrzeuge
+                final_options_tuple = tuple(sorted([normalize_name(opt) for opt in options_text if opt]))
+
+                if not final_options_tuple: continue
+                
+                if final_options_tuple not in requirements_dict:
+                    requirements_dict[final_options_tuple] = {'count': 0, 'is_prob_only': True}
+                
+                count = int(count_text) if count_text.isdigit() else 1
+                requirements_dict[final_options_tuple]['count'] = max(requirements_dict[final_options_tuple]['count'], count)
+
+                if not is_prob:
+                    requirements_dict[final_options_tuple]['is_prob_only'] = False
+
+            # --- DEBUG: GIB DIE GESAMMELTEN DATEN AUS ---
+            print("\n--- DEBUG: Gesammelte Anforderungen vor der End-Prüfung ---")
+            for options, data in requirements_dict.items():
+                print(f"  -> Fahrzeug/Optionen: {options}, Anzahl: {data['count']}, Nur-Wahrscheinlichkeit: {data['is_prob_only']}")
+            print("----------------------------------------------------------\n")
+            # --- ENDE DEBUG ---
+
+            # --- PHASE 2: Endgültige Liste basierend auf den gesammelten, sauberen Daten erstellen ---
+            for options_tuple, data in requirements_dict.items():
+                is_owned = all(opt in player_inventory for opt in options_tuple)
+
+                # --- DEBUG: GIB DIE ENTSCHEIDUNGSGRUNDLAGE AUS ---
+                print(f"DEBUG-Check für '{'/'.join(options_tuple)}':")
+                print(f"  - Ist NUR Wahrscheinlichkeit? -> {data['is_prob_only']}")
+                print(f"  - Ist im Inventar? -> {is_owned}")
+                # --- ENDE DEBUG ---
+
+                if not data['is_prob_only'] or (data['is_prob_only'] and is_owned):
+                    print(f"  ==> ENTSCHEIDUNG: WIRD HINZUGEFÜGT.")
+                    for _ in range(data['count']):
+                        raw_requirements['fahrzeuge'].append(list(options_tuple))
+                else:
+                    print(f"  ==> ENTSCHEIDUNG: WIRD IGNORIERT (Wahrscheinlichkeit & nicht im Bestand).")
 
         except TimeoutException: print("Info: Keine Fahrzeug-Anforderungstabellen gefunden.")
         
-        try:
+        try: # Credits auslesen
             credits_selector = "//td[normalize-space()='Credits im Durchschnitt']/following-sibling::td"
             credits_text = driver.find_element(By.XPATH, credits_selector).text.strip().replace(".", "").replace(",", "")
             if credits_text.isdigit(): raw_requirements['credits'] = int(credits_text)
