@@ -254,6 +254,10 @@ def get_mission_requirements(driver, wait, player_inventory):
                 if vehicle_name not in player_inventory:
                     print(f"    -> Info: Requirement for '{vehicle_name}' ignored (Probability & Not in Inventory).")
                     
+                    # --- DEBUG PRINTS RE-ADDED ---
+                    print(f"    DEBUG: Searching to remove '{vehicle_name}'.")
+                    print(f"    DEBUG: Current requirement list: {raw_requirements['fahrzeuge']}")
+                    
                     # Remove all instances of this vehicle from the requirements
                     original_count = len(raw_requirements['fahrzeuge'])
                     cleaned_fahrzeuge = [req_list for req_list in raw_requirements['fahrzeuge'] if vehicle_name not in req_list]
