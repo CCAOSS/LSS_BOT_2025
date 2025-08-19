@@ -221,7 +221,7 @@ def get_mission_requirements(driver, wait, player_inventory):
                 # Store all probability vehicles for a final check
                 if item['is_prob']:
                     # **KORREKTUR HIER:** Der Name wird jetzt richtig extrahiert
-                    prob_name = item['text'].split('(')[0].strip()
+                    prob_name = item['text'].split('(')[0].strip().replace("Anforderungswahrscheinlichkeit", "")
                     normalized_prob_name = normalize_name(prob_name)
                     prob_vehicles_to_check.add(normalized_prob_name)
 
