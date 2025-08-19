@@ -557,47 +557,49 @@ def handle_sprechwunsche(driver, wait):
             print("Info: Kehre nach Sprechwunsch-Bearbeitung zur Hauptseite zurück.")
             driver.get("https://www.leitstellenspiel.de/")
 
+def load_vehicle_id_map(file_path=resource_path("vehicle_id.json")):
+    """Lädt die Fahrzeug-ID-Zuordnung aus einer JSON-Datei."""
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        print(f"FEHLER: Die ID-Datei '{file_path}' wurde nicht gefunden!"); return None
+    except json.JSONDecodeError:
+        print(f"FEHLER: Die Datei '{file_path}' hat ein ungültiges JSON-Format."); return None
+
+# Ersetze die alte Funktion komplett durch diese neue Version
 def get_player_vehicle_inventory(driver, wait):
     """
-    Liest den Fuhrpark aus der korrekten Tabellenstruktur der /vehicles-Seite aus.
+    **NEUE LOGIK:** Liest den Fuhrpark aus, indem es die 'vehicle_type_id' ausliest
+    und über die 'vehicle_id.json' in den korrekten Fahrzeugnamen umwandelt.
     """
     print("Info: Lese den kompletten Fuhrpark (Inventar) ein...")
+    
+    vehicle_id_map = load_vehicle_id_map()
+    if not vehicle_id_map:
+        print("WARNUNG: Fahrzeug-ID-Map konnte nicht geladen werden. Inventarprüfung wird ungenau sein.")
+        return set() # Gebe ein leeres Set zurück, um einen Absturz zu vermeiden
+
     inventory = set()
     try:
         driver.get("https://www.leitstellenspiel.de/vehicles")
         
-        # Der iFrame-Befehl ist hier nicht nötig, da es eine normale Tabelle ist.
-        # Wir suchen nach allen Tabellenzeilen (tr) im Tabellenkörper (tbody).
-        vehicle_rows_selector = "//tbody/tr"
-        
-        # Warte, bis die Zeilen geladen sind
-        vehicle_rows = wait.until(EC.presence_of_all_elements_located((By.XPATH, vehicle_rows_selector)))
-        
+        vehicle_rows = wait.until(EC.presence_of_all_elements_located((By.XPATH, "//tbody/tr")))
         print(f"Info: {len(vehicle_rows)} Fahrzeuge im Fuhrpark gefunden. Analysiere Typen...")
 
-        kennung_map = {props['kennung']: std_type for std_type, props in VEHICLE_DATABASE.items() if props.get('kennung') and props.get('kennung') != ""}
-
-        for link in vehicle_rows:
-            link_text = link.text.strip()
-            if not link_text: continue
-
-            identified_type = None
+        for row in vehicle_rows:
+            # Lese die Fahrzeug-ID aus dem 'data-vehicle-type-id'-Attribut
+            vehicle_id = row.get_attribute('data-vehicle-type-id')
             
-            # Methode 1: Prüfe, ob der Name exakt einem Typ in der Datenbank entspricht (für Standard-Fahrzeuge)
-            if link_text in VEHICLE_DATABASE:
-                identified_type = link_text
-            
-            # Methode 2: Wenn nicht, prüfe, ob eine Kennung im Namen enthalten ist
-            else:
-                for kennung, std_type in kennung_map.items():
-                    if kennung in link_text:
-                        identified_type = std_type
-                        break
-            
-            if identified_type:
-                inventory.add(identified_type)
+            if vehicle_id:
+                # Finde den passenden Namen in unserer ID-Map
+                vehicle_name = vehicle_id_map.get(vehicle_id)
+                if vehicle_name:
+                    inventory.add(vehicle_name)
+                else:
+                    print(f"Warnung: Unbekannte Fahrzeug-ID '{vehicle_id}' im Inventar gefunden.")
         
-        print(f"Info: Inventar mit {len(inventory)} einzigartigen Fahrzeugtypen erfolgreich erstellt: {inventory}")
+        print(f"Info: Inventar mit {len(inventory)} einzigartigen Fahrzeugtypen erfolgreich erstellt.")
         
     except Exception as e:
         print(f"FEHLER: Konnte den Fuhrpark nicht einlesen: {e}")
