@@ -176,18 +176,18 @@ def setup_driver():
     
 def get_mission_requirements(driver, wait, player_inventory):
     """
-    **BUGFIX V12:** Verbessert das Parsing für komplexe Anforderungen,
-    die sowohl Kommas als auch "oder" enthalten.
+    **BUGFIX V13:** Verhindert das Doppel-Zählen von Anforderungen durch einen
+    intelligenten Zwei-Phasen-Scan, der redundante Wahrscheinlichkeits-Zeilen ignoriert.
     """
     
     # --- ANPASSBARE ÜBERSETZUNGS-LISTE ---
     translation_map = {
         "Feuerwehrkran": "FwK",
-        "Drehleiter": "DLK 23/12",
+        "Drehleiter": "DLK 23",
         "Rettungswagen": "RTW",
-        "Löschfahrzeuge": "Löschfahrzeug", # Plural-Formen hier hinzufügen
-        "Rüstwagen": "RW",             # Beispiel, falls du RW nutzt
-        "Gerätewagen Öl": "GW-Öl",       # Beispiel
+        "Löschfahrzeuge": "Löschfahrzeug",
+        "Rüstwagen": "RW",
+        "Gerätewagen Öl": "GW-Öl",
     }
     # --- ENDE ANPASSBARE ÜBERSETZUNGS-LISTE ---
 
@@ -198,59 +198,81 @@ def get_mission_requirements(driver, wait, player_inventory):
             vehicle_table = wait.until(EC.visibility_of_element_located((By.XPATH, "//table[.//th[contains(text(), 'Fahrzeuge')]]")))
             rows = vehicle_table.find_elements(By.XPATH, ".//tbody/tr")
 
+            # --- PHASE 1: Vorab-Scan, um alle festen Anforderungen zu identifizieren ---
+            hard_requirements_set = set()
             for row in rows:
                 cells = row.find_elements(By.TAG_NAME, 'td')
                 if len(cells) < 2: continue
-                
+                requirement_text = cells[0].text.strip()
+                if "anforderungswahrscheinlichkeit" not in requirement_text.lower():
+                    clean_name = requirement_text.split('(')[0].strip().replace("Benötigte ", "")
+                    # Zerlege auch hier komplexe Anforderungen
+                    options = []
+                    parts = [p.strip() for p in clean_name.split(" oder ")]
+                    for part in parts:
+                        options.extend([sp.strip() for sp in part.split(",")])
+                    
+                    for option in options:
+                        if option: hard_requirements_set.add(option)
+            
+            # --- PHASE 2: Komplette Verarbeitung mit dem Wissen aus Phase 1 ---
+            for row in rows:
+                cells = row.find_elements(By.TAG_NAME, 'td')
+                if len(cells) < 2: continue
                 requirement_text, count_text = cells[0].text.strip(), cells[1].text.strip().replace(" L", "")
                 
-                clean_name = requirement_text.split('(')[0].strip().replace("Benötigte ", "")
-
-                # Wahrscheinlichkeits-Anforderung prüfen, bevor wir den Text weiter zerlegen
-                is_probability_req = "anforderungswahrscheinlichkeit" in requirement_text.lower()
-                if is_probability_req:
-                    translated_name = translation_map.get(clean_name, clean_name)
-                    if translated_name not in player_inventory:
-                        print(f"    -> Info: Ignoriere Wahrscheinlichkeits-Anforderung für '{translated_name}' (nicht im Bestand).")
-                        continue
-                
-                # --- NEUE LOGIK FÜR KOMPLEXE ANFORDERUNGEN ---
-                options = []
-                # Zuerst nach "oder" aufteilen
-                parts = [p.strip() for p in clean_name.split(" oder ")]
-                for part in parts:
-                    # Dann jeden Teil nach Kommas aufteilen
-                    sub_parts = [sp.strip() for sp in part.split(",")]
-                    options.extend(sub_parts)
-
-                # Bereinige und übersetze jede einzelne Option
-                final_options = []
-                for option in options:
-                    # Plural-Logik anwenden
-                    if option.endswith("kräne"): option = option.replace("kräne", "kran")
-                    elif option.endswith("wägen"): option = option.replace("wägen", "wagen")
-                    elif option.endswith("leitern"): option = option.replace("leitern", "leiter")
+                # --- Wahrscheinlichkeits-Logik ---
+                if "anforderungswahrscheinlichkeit" in requirement_text.lower():
+                    prob_name = requirement_text.split('(')[0].strip()
                     
-                    # Übersetzung anwenden
-                    translated_option = translation_map.get(option, option)
-                    final_options.append(translated_option)
-                # --- ENDE NEUE LOGIK ---
+                    # Ignoriere, wenn es bereits eine feste Anforderung dafür gibt
+                    if prob_name in hard_requirements_set:
+                        print(f"    -> Info: Ignoriere redundante Wahrscheinlichkeits-Anforderung für '{prob_name}'.")
+                        continue
+                    
+                    # Wenn es eine *einzigartige* Anforderung ist, prüfe den Bestand
+                    translated_prob_name = translation_map.get(prob_name, prob_name)
+                    if translated_prob_name not in player_inventory:
+                        print(f"    -> Info: Ignoriere einzigartige Wahrscheinlichkeits-Anforderung für '{translated_prob_name}' (nicht im Bestand).")
+                        continue
+                    else:
+                         # Füge die einzigartige, vorhandene Anforderung hinzu
+                         raw_requirements['fahrzeuge'].append([translated_prob_name])
+                         print(f"    -> Info: Füge einzigartige Wahrscheinlichkeits-Anforderung für '{translated_prob_name}' hinzu (im Bestand).")
 
-                # Ressourcen (Personal, Wasser etc.) separat behandeln
-                req_lower_clean = clean_name.lower()
-                if any(keyword in req_lower_clean for keyword in ["personal", "feuerwehrleute", "wasser", "schaummittel"]):
-                    if "personal" in req_lower_clean or "feuerwehrleute" in req_lower_clean:
-                        if count_text.isdigit(): raw_requirements['personal'] += int(count_text)
-                    elif "wasser" in req_lower_clean:
-                        if count_text.isdigit(): raw_requirements['wasser'] += int(count_text)
-                    elif "schaummittel" in req_lower_clean:
-                        if count_text.isdigit(): raw_requirements['schaummittel'] += int(count_text)
-                    continue # Zur nächsten Zeile springen, da Ressource verarbeitet wurde
+                # --- Feste Anforderungen (Fahrzeuge & Ressourcen) ---
+                else:
+                    clean_name = requirement_text.split('(')[0].strip().replace("Benötigte ", "")
+                    req_lower_clean = clean_name.lower()
 
-                # Fahrzeug-Anforderungen zur Liste hinzufügen
-                if count_text.isdigit():
-                    for _ in range(int(count_text)):
-                        raw_requirements['fahrzeuge'].append(final_options)
+                    if any(keyword in req_lower_clean for keyword in ["personal", "feuerwehrleute", "wasser", "schaummittel"]):
+                        if "personal" in req_lower_clean or "feuerwehrleute" in req_lower_clean:
+                            if count_text.isdigit(): raw_requirements['personal'] += int(count_text)
+                        elif "wasser" in req_lower_clean:
+                            if count_text.isdigit(): raw_requirements['wasser'] += int(count_text)
+                        elif "schaummittel" in req_lower_clean:
+                            if count_text.isdigit(): raw_requirements['schaummittel'] += int(count_text)
+                        continue
+                    
+                    # Verarbeite komplexe Fahrzeuganforderungen
+                    options = []
+                    parts = [p.strip() for p in clean_name.split(" oder ")]
+                    for part in parts:
+                        options.extend([sp.strip() for sp in part.split(",")])
+
+                    final_options = []
+                    for option in options:
+                        if not option: continue
+                        if option.endswith("kräne"): option = option.replace("kräne", "kran")
+                        elif option.endswith("wägen"): option = option.replace("wägen", "wagen")
+                        elif option.endswith("leitern"): option = option.replace("leitern", "leiter")
+                        
+                        translated_option = translation_map.get(option, option)
+                        final_options.append(translated_option)
+                    
+                    if count_text.isdigit() and final_options:
+                        for _ in range(int(count_text)):
+                            raw_requirements['fahrzeuge'].append(final_options)
 
         except TimeoutException: print("Info: Keine Fahrzeug-Anforderungstabellen gefunden.")
         
