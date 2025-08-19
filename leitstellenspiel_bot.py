@@ -176,8 +176,8 @@ def setup_driver():
     
 def get_mission_requirements(driver, wait, player_inventory):
     """
-    **BUGFIX V13:** Verhindert das Doppel-Zählen von Anforderungen durch einen
-    intelligenten Zwei-Phasen-Scan, der redundante Wahrscheinlichkeits-Zeilen ignoriert.
+    **BUGFIX V14:** Behebt den Logikfehler im Zwei-Phasen-Scan, indem sichergestellt
+    wird, dass Fahrzeugnamen vor dem Vergleich identisch bereinigt und übersetzt werden.
     """
     
     # --- ANPASSBARE ÜBERSETZUNGS-LISTE ---
@@ -188,6 +188,7 @@ def get_mission_requirements(driver, wait, player_inventory):
         "Löschfahrzeuge": "Löschfahrzeug",
         "Rüstwagen": "RW",
         "Gerätewagen Öl": "GW-Öl",
+        "GW-Höhenrettung": "GW-HÖ" # Beispiel für eine weitere Abkürzung
     }
     # --- ENDE ANPASSBARE ÜBERSETZUNGS-LISTE ---
 
@@ -198,6 +199,17 @@ def get_mission_requirements(driver, wait, player_inventory):
             vehicle_table = wait.until(EC.visibility_of_element_located((By.XPATH, "//table[.//th[contains(text(), 'Fahrzeuge')]]")))
             rows = vehicle_table.find_elements(By.XPATH, ".//tbody/tr")
 
+            # Hilfsfunktion, um Namen konsistent zu bereinigen und zu übersetzen
+            def normalize_name(name):
+                # Von "(...)" befreien
+                clean = name.split('(')[0].strip().replace("Benötigte ", "")
+                # Plural -> Singular
+                if clean.endswith("kräne"): clean = clean.replace("kräne", "kran")
+                elif clean.endswith("wägen"): clean = clean.replace("wägen", "wagen")
+                elif clean.endswith("leitern"): clean = clean.replace("leitern", "leiter")
+                # Übersetzen
+                return translation_map.get(clean, clean)
+
             # --- PHASE 1: Vorab-Scan, um alle festen Anforderungen zu identifizieren ---
             hard_requirements_set = set()
             for row in rows:
@@ -205,15 +217,14 @@ def get_mission_requirements(driver, wait, player_inventory):
                 if len(cells) < 2: continue
                 requirement_text = cells[0].text.strip()
                 if "anforderungswahrscheinlichkeit" not in requirement_text.lower():
-                    clean_name = requirement_text.split('(')[0].strip().replace("Benötigte ", "")
                     # Zerlege auch hier komplexe Anforderungen
-                    options = []
-                    parts = [p.strip() for p in clean_name.split(" oder ")]
-                    for part in parts:
-                        options.extend([sp.strip() for sp in part.split(",")])
-                    
-                    for option in options:
-                        if option: hard_requirements_set.add(option)
+                    base_name = requirement_text.split('(')[0].strip().replace("Benötigte ", "")
+                    options_text = [p.strip() for p in base_name.replace(",", " oder ").split(" oder ")]
+                    for option in options_text:
+                        if option:
+                            # BENUTZE DIE HELFSFUNKTION FÜR KONSISTENZ
+                            normalized = normalize_name(option)
+                            hard_requirements_set.add(normalized)
             
             # --- PHASE 2: Komplette Verarbeitung mit dem Wissen aus Phase 1 ---
             for row in rows:
@@ -223,29 +234,28 @@ def get_mission_requirements(driver, wait, player_inventory):
                 
                 # --- Wahrscheinlichkeits-Logik ---
                 if "anforderungswahrscheinlichkeit" in requirement_text.lower():
-                    prob_name = requirement_text.split('(')[0].strip()
+                    prob_name_raw = requirement_text.split('(')[0].strip()
                     
-                    # Ignoriere, wenn es bereits eine feste Anforderung dafür gibt
-                    if prob_name in hard_requirements_set:
-                        print(f"    -> Info: Ignoriere redundante Wahrscheinlichkeits-Anforderung für '{prob_name}'.")
+                    # BENUTZE DIE GLEICHE HELFSFUNKTION WIE IN PHASE 1
+                    prob_name_normalized = normalize_name(prob_name_raw)
+
+                    if prob_name_normalized in hard_requirements_set:
+                        print(f"    -> Info: Ignoriere redundante Wahrscheinlichkeits-Anforderung für '{prob_name_raw}'.")
                         continue
                     
-                    # Wenn es eine *einzigartige* Anforderung ist, prüfe den Bestand
-                    translated_prob_name = translation_map.get(prob_name, prob_name)
-                    if translated_prob_name not in player_inventory:
-                        print(f"    -> Info: Ignoriere einzigartige Wahrscheinlichkeits-Anforderung für '{translated_prob_name}' (nicht im Bestand).")
+                    if prob_name_normalized not in player_inventory:
+                        print(f"    -> Info: Ignoriere einzigartige Wahrscheinlichkeits-Anforderung für '{prob_name_normalized}' (nicht im Bestand).")
                         continue
                     else:
-                         # Füge die einzigartige, vorhandene Anforderung hinzu
-                         raw_requirements['fahrzeuge'].append([translated_prob_name])
-                         print(f"    -> Info: Füge einzigartige Wahrscheinlichkeits-Anforderung für '{translated_prob_name}' hinzu (im Bestand).")
+                         raw_requirements['fahrzeuge'].append([prob_name_normalized])
+                         print(f"    -> Info: Füge einzigartige Wahrscheinlichkeits-Anforderung für '{prob_name_normalized}' hinzu (im Bestand).")
 
                 # --- Feste Anforderungen (Fahrzeuge & Ressourcen) ---
                 else:
                     clean_name = requirement_text.split('(')[0].strip().replace("Benötigte ", "")
-                    req_lower_clean = clean_name.lower()
-
-                    if any(keyword in req_lower_clean for keyword in ["personal", "feuerwehrleute", "wasser", "schaummittel"]):
+                    if any(keyword in clean_name.lower() for keyword in ["personal", "feuerwehrleute", "wasser", "schaummittel"]):
+                        # ... (Ressourcen-Logik bleibt unverändert)
+                        req_lower_clean = clean_name.lower()
                         if "personal" in req_lower_clean or "feuerwehrleute" in req_lower_clean:
                             if count_text.isdigit(): raw_requirements['personal'] += int(count_text)
                         elif "wasser" in req_lower_clean:
@@ -255,20 +265,8 @@ def get_mission_requirements(driver, wait, player_inventory):
                         continue
                     
                     # Verarbeite komplexe Fahrzeuganforderungen
-                    options = []
-                    parts = [p.strip() for p in clean_name.split(" oder ")]
-                    for part in parts:
-                        options.extend([sp.strip() for sp in part.split(",")])
-
-                    final_options = []
-                    for option in options:
-                        if not option: continue
-                        if option.endswith("kräne"): option = option.replace("kräne", "kran")
-                        elif option.endswith("wägen"): option = option.replace("wägen", "wagen")
-                        elif option.endswith("leitern"): option = option.replace("leitern", "leiter")
-                        
-                        translated_option = translation_map.get(option, option)
-                        final_options.append(translated_option)
+                    options_text = [p.strip() for p in clean_name.replace(",", " oder ").split(" oder ")]
+                    final_options = [normalize_name(opt) for opt in options_text if opt]
                     
                     if count_text.isdigit() and final_options:
                         for _ in range(int(count_text)):
