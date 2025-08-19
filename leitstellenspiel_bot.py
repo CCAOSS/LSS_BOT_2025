@@ -176,11 +176,10 @@ def setup_driver():
     
 def get_mission_requirements(driver, wait, player_inventory):
     """
-    **FINALER FIX V19:** Korrigiert den letzten Parsing-Fehler, indem sichergestellt wird,
-    dass die Namen der Wahrscheinlichkeits-Fahrzeuge vor der Bereinigung korrekt
-    normalisiert werden.
+    **DEBUG-VERSION V2:** Fügt die entscheidenden Debug-Ausgaben wieder hinzu,
+    um den Fehler beim Abgleich exakt zu identifizieren.
     """
-    
+
     # --- ANPASSBARE ÜBERSETZUNGS-LISTE ---
     translation_map = {
         "Feuerwehrkran": "FwK",
@@ -199,7 +198,6 @@ def get_mission_requirements(driver, wait, player_inventory):
             vehicle_table = wait.until(EC.visibility_of_element_located((By.XPATH, "//table[.//th[contains(text(), 'Fahrzeuge')]]")))
             rows = vehicle_table.find_elements(By.XPATH, ".//tbody/tr")
 
-            # Hilfsfunktion für konsistente Namens-Bereinigung
             def normalize_name(name):
                 clean = name.split('(')[0].strip().replace("Benötigte ", "")
                 if clean.endswith("kräne"): clean = clean.replace("kräne", "kran")
@@ -207,7 +205,6 @@ def get_mission_requirements(driver, wait, player_inventory):
                 elif clean.endswith("leitern"): clean = clean.replace("leitern", "leiter")
                 return translation_map.get(clean, clean)
 
-            # --- PHASE 1: Alle Rohdaten aus der Tabelle sammeln ---
             collected_data = []
             for row in rows:
                 cells = row.find_elements(By.TAG_NAME, 'td')
@@ -216,11 +213,9 @@ def get_mission_requirements(driver, wait, player_inventory):
                 is_prob = "anforderungswahrscheinlichkeit" in requirement_text.lower()
                 collected_data.append({'text': requirement_text, 'count': count_text, 'is_prob': is_prob})
 
-            # --- PHASE 2: Feste Anforderungen zuerst verarbeiten ---
             prob_vehicles_to_check = set()
             for item in collected_data:
                 if item['is_prob']:
-                    # HIER IST DIE KORREKTUR: Der Name wird sofort und vollständig normalisiert
                     prob_name = normalize_name(item['text'])
                     prob_vehicles_to_check.add(prob_name)
                     continue
@@ -247,10 +242,13 @@ def get_mission_requirements(driver, wait, player_inventory):
                     for _ in range(int(item['count'])):
                         raw_requirements['fahrzeuge'].append(final_options)
             
-            # --- PHASE 3: Wahrscheinlichkeiten prüfen und Anforderungen BEREINIGEN ---
             for vehicle_name in prob_vehicles_to_check:
                 if vehicle_name not in player_inventory:
                     print(f"    -> Info: Anforderung '{vehicle_name}' wird ignoriert (Wahrscheinlichkeit & nicht im Bestand).")
+                    
+                    ### HIER SIND DIE DEBUG-AUSGABEN WIEDER AKTIVIERT ###
+                    print(f"    DEBUG: Suche nach '{vehicle_name}' zum Entfernen.")
+                    print(f"    DEBUG: Aktuelle Anforderungsliste: {raw_requirements['fahrzeuge']}")
                     
                     original_count = len(raw_requirements['fahrzeuge'])
                     cleaned_fahrzeuge = [req_list for req_list in raw_requirements['fahrzeuge'] if vehicle_name not in req_list]
@@ -261,7 +259,7 @@ def get_mission_requirements(driver, wait, player_inventory):
 
         except TimeoutException: print("Info: Keine Fahrzeug-Anforderungstabellen gefunden.")
         
-        try: # Credits auslesen
+        try:
             credits_selector = "//td[normalize-space()='Credits im Durchschnitt']/following-sibling::td"
             credits_text = driver.find_element(By.XPATH, credits_selector).text.strip().replace(".", "").replace(",", "")
             if credits_text.isdigit(): raw_requirements['credits'] = int(credits_text)
