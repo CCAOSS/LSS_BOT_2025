@@ -176,7 +176,7 @@ def setup_driver():
     
 def get_mission_requirements(driver, wait, player_inventory):
     """
-    **FINALE VERSION:** Kombiniert alle Features (Feuerlöschpumpe, Oder-Logik)
+    **FINAL VERSION:** Kombiniert alle Features (Feuerlöschpumpe, Oder-Logik)
     mit einer robusten 3-Phasen-Logik, um das Wahrscheinlichkeitsproblem
     endgültig zu lösen.
     """
@@ -189,6 +189,7 @@ def get_mission_requirements(driver, wait, player_inventory):
         "Löschfahrzeuge": "Löschfahrzeug",
         "Rüstwagen": "RW",
         "Gerätewagen Öl": "GW-Öl",
+        "GW-Höhenrettung": "GW-HÖ"
     }
     # --- ENDE ANPASSBARE ÜBERSETZUNGS-LISTE ---
 
@@ -221,8 +222,10 @@ def get_mission_requirements(driver, wait, player_inventory):
             for item in collected_data:
                 # Wahrscheinlichkeiten werden in Phase 3 geprüft
                 if item['is_prob']:
-                    prob_name = normalize_name(item['text'])
-                    prob_vehicles_to_check.add(prob_name)
+                    # **KORREKTUR HIER:** Der Name wird jetzt richtig extrahiert
+                    prob_name = item['text'].split('(')[0].strip()
+                    normalized_prob_name = normalize_name(prob_name)
+                    prob_vehicles_to_check.add(normalized_prob_name)
                     continue
 
                 # Feste Anforderungen (Ressourcen & Fahrzeuge)
