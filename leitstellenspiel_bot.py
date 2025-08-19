@@ -174,7 +174,7 @@ def setup_driver():
     
 
     
-def get_mission_requirements(driver, wait, player_inventory):
+def get_mission_requirements(driver, wait, player_inventory, given_patients):
     """
     **FINAL VERSION:** A complete rewrite to definitively fix the inventory
     and probability check logic using a clear, multi-pass approach.
@@ -183,7 +183,7 @@ def get_mission_requirements(driver, wait, player_inventory):
     # --- ANPASSBARE ÜBERSETZUNGS-LISTE ---
     translation_map = {
         "Feuerwehrkran": "FwK",
-        "Drehleiter": "DLK 23",
+        "Drehleitern": "Drehleiter",
         "Rettungswagen": "RTW",
         "Löschfahrzeuge": "Löschfahrzeug",
         "Rüstwagen": "RW",
@@ -191,7 +191,7 @@ def get_mission_requirements(driver, wait, player_inventory):
     }
     # --- ENDE ANPASSBARE ÜBERSETZUNGS-LISTE ---
 
-    raw_requirements = {'fahrzeuge': [], 'personal': 0, 'wasser': 0, 'schaummittel': 0, 'credits': 0}
+    raw_requirements = {'fahrzeuge': [], 'patienten': 0, 'personal': 0, 'wasser': 0, 'schaummittel': 0, 'credits': 0}
     try:
         wait.until(EC.element_to_be_clickable((By.XPATH, "//a[contains(text(), 'Hilfe')]"))).click()
         try:
@@ -230,9 +230,12 @@ def get_mission_requirements(driver, wait, player_inventory):
                     clean_name = item['text'].split('(')[0].strip().replace("Benötigte ", "")
                     req_lower_clean = clean_name.lower()
                     
-                    if any(keyword in req_lower_clean for keyword in ["personal", "feuerwehrleute", "wasser", "schaummittel", "feuerlöschpumpe"]):
+                    if any(keyword in req_lower_clean for keyword in ["schlauchwagen", "personal", "feuerwehrleute", "wasser", "schaummittel", "feuerlöschpumpe"]):
                         if "personal" in req_lower_clean or "feuerwehrleute" in req_lower_clean:
                             if item['count'].isdigit(): raw_requirements['personal'] += int(item['count'])
+                        elif "schlauchwagen" in req_lower_clean:
+                            if item['count'].isdigit():
+                                for _ in range(int(item['count'])): raw_requirements['fahrzeuge'].append(["Schlauchwagen"])
                         elif "wasser" in req_lower_clean:
                             if item['count'].isdigit(): raw_requirements['wasser'] += int(item['count'])
                         elif "schaummittel" in req_lower_clean:
@@ -252,18 +255,18 @@ def get_mission_requirements(driver, wait, player_inventory):
             # --- PHASE 3: Final check and cleanup ---
             for vehicle_name in prob_vehicles_to_check:
                 if vehicle_name not in player_inventory:
-                    #print(f"    -> Info: Requirement for '{vehicle_name}' ignored (Probability & Not in Inventory).")
+                    #print(f"     -> Info: Requirement for '{vehicle_name}' ignored (Probability & Not in Inventory).")
                     
-                    # --- DEBUG PRINTS RE-ADDED ---
-                    #print(f"    DEBUG: Searching to remove '{vehicle_name}'.")
-                    #print(f"    DEBUG: Current requirement list: {raw_requirements['fahrzeuge']}")
+                    # --- DEBUG PRINTS ---
+                    #print(f"     DEBUG: Searching to remove '{vehicle_name}'.")
+                    #print(f"     DEBUG: Current requirement list: {raw_requirements['fahrzeuge']}")
                     
                     # Remove all instances of this vehicle from the requirements
                     original_count = len(raw_requirements['fahrzeuge'])
                     cleaned_fahrzeuge = [req_list for req_list in raw_requirements['fahrzeuge'] if vehicle_name not in req_list]
                     
                     if original_count != len(cleaned_fahrzeuge):
-                        #print(f"    -> Correction: '{vehicle_name}' is being removed from the requirement list.")
+                        #print(f"     -> Correction: '{vehicle_name}' is being removed from the requirement list.")
                         raw_requirements['fahrzeuge'] = cleaned_fahrzeuge
 
         except TimeoutException: print("Info: No vehicle requirement table found.")
@@ -273,6 +276,28 @@ def get_mission_requirements(driver, wait, player_inventory):
             credits_text = driver.find_element(By.XPATH, credits_selector).text.strip().replace(".", "").replace(",", "")
             if credits_text.isdigit(): raw_requirements['credits'] = int(credits_text)
         except NoSuchElementException: pass
+        
+        # --- NEUER ABSCHNITT: PATIENTENANZAHL BESTIMMEN ---
+        min_patients = 0
+        calculated_patients = 0
+        try:
+            # 1. Lese die Mindestanzahl aus der HTML-Tabelle
+            min_patients_selector = "//td[normalize-space()='Mindest Patientenanzahl']/following-sibling::td"
+            min_patients_text = driver.find_element(By.XPATH, min_patients_selector).text.strip()
+            if min_patients_text.isdigit():
+                min_patients = int(min_patients_text)
+        except NoSuchElementException:
+            # Wenn das Feld nicht existiert, bleibt min_patients bei 0
+            pass
+
+        # 2. Wende deine definierte Logik an
+        if given_patients == 0 and min_patients > 0:
+            calculated_patients = min_patients # War vorher 1, aber min_patients ist flexibler
+        else:
+            calculated_patients = given_patients
+        
+        raw_requirements['patienten'] = calculated_patients
+        # --- ENDE NEUER ABSCHNITT ---
 
     except TimeoutException: return None
     finally:
@@ -695,7 +720,9 @@ def main_bot_logic(gui_vars):
                         print(f"Info: Ignoriere zukünftigen Einsatz '{mission['name']}' (Start in {mission['timeleft'] // 60} min)"); continue
                     
                     gui_vars['mission_name'].set(f"({i+1}/{len(mission_data)}) {mission['name']}"); driver.get(mission['url'])
-                    raw_requirements = get_mission_requirements(driver, wait, player_inventory)
+
+                    existing_patients = mission["patienten"]
+                    raw_requirements = get_mission_requirements(driver, wait, player_inventory, existing_patients)
                     if not raw_requirements: continue
                     
                     if mission['timeleft'] > 0 and raw_requirements.get('credits', 0) < MINIMUM_CREDITS:
