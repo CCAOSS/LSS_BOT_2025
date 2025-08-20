@@ -251,7 +251,7 @@ def get_mission_requirements(driver, wait, player_inventory, given_patients):
             # --- PHASE 3: Final check and cleanup ---
             for vehicle_name in prob_vehicles_to_check:
                 if vehicle_name not in player_inventory:
-                    #print(f"     -> Info: Requirement for '{vehicle_name}' ignored (Probability & Not in Inventory).")
+                    print(f"     -> Info: Requirement for '{vehicle_name}' ignored (Probability & Not in Inventory).")
                     
                     # --- DEBUG PRINTS ---
                     #print(f"     DEBUG: Searching to remove '{vehicle_name}'.")
