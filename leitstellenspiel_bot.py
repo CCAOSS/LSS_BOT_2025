@@ -717,6 +717,10 @@ def main_bot_logic(gui_vars):
                     if not gui_vars['pause_event'].is_set(): gui_vars['status'].set("Bot pausiert..."); gui_vars['pause_event'].wait()
                     if "[Verband]" in mission['name'] or mission['id'] in dispatched_mission_ids: continue
                     
+                    if mission['name'].lower() == "krankentransport":
+                        print("INFO: Krankentransport skipped")
+                        continue
+
                     if mission['timeleft'] > MAX_START_DELAY_SECONDS:
                         gui_vars['status'].set(f"Einsatz startet erst in {mission['timeleft']} - überspringt")
                         print(f"Info: Ignoriere zukünftigen Einsatz '{mission['name']}' (Start in {mission['timeleft'] // 60} min)"); continue
