@@ -292,8 +292,12 @@ def get_mission_requirements(driver, wait, player_inventory, given_patients):
         # 2. Wende deine definierte Logik an
         if given_patients == 0 and min_patients > 0:
             calculated_patients = min_patients # War vorher 1, aber min_patients ist flexibler
+            print("Patienten treten am ende auf! - calculated patients:", calculated_patients)
+        elif given_patients == 0 and min_patients == 0:
+            print("Keine Patienten vorhanden!")
         else:
             calculated_patients = given_patients
+            print("Patienten bereits vorhanden! - calculated patients:", calculated_patients)
         
         raw_requirements['patienten'] = calculated_patients
         # --- ENDE NEUER ABSCHNITT ---
