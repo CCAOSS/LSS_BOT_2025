@@ -188,6 +188,7 @@ def get_mission_requirements(driver, wait, player_inventory, given_patients):
         "Rettungswagen": "RTW",
         "Löschfahrzeuge": "Löschfahrzeug",
         "Gerätewagen Öl": "GW-Öl",
+        "Seenotrettungsboote": "Seenotrettungsboot",
     }
     # --- ENDE ANPASSBARE ÜBERSETZUNGS-LISTE ---
 

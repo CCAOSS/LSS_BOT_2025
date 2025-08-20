@@ -112,7 +112,7 @@
     "MTW-O": { "fraktion": "THW", "personal": 5, "typ": "Rettungshundestaffeln"},
     "MzGW (FGr N)": { "fraktion": "THW", "personal": 9, "typ": "MzGW (FGr N)"},
     "MLW 5": { "fraktion": "THW", "personal": 9, "typ": ["MLW 5"] },
-    "MzGW SB 5": { "fraktion": "THW", "personal": 9, "typ": ["MzGW SB"] },
+    "MzGW SB": { "fraktion": "THW", "personal": 9, "typ": ["MzGW SB"] },
     "Anh Hund": { "fraktion": "THW", "personal": 0, "typ": "Rettungshundestaffeln"},
     "LKW K 9": { "fraktion": "THW", "personal": 2, "typ": ["LKW K 9"] },
     "FüKw": { "fraktion": "THW", "personal": 4, "typ": ["Führungskraftwagen (FüKw)"] },
