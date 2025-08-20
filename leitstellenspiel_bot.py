@@ -724,6 +724,12 @@ def main_bot_logic(gui_vars):
                     print(f"-----------------{mission['name']}-----------------")
                     gui_vars['mission_name'].set(f"({i+1}/{len(mission_data)}) {mission['name']}"); driver.get(mission['url'])
 
+                    #//reset gui
+                    gui_vars['status'].set("Lade nächsten einsatz")
+                    gui_vars['alarm_status'].set("Status: ")
+                    gui_vars['requirements'].set("Bedarf: ")
+                    gui_vars['availability'].set("Verfügbar: ")
+
                     existing_patients = mission["patienten"]
                     raw_requirements = get_mission_requirements(driver, wait, player_inventory, existing_patients)
                     if not raw_requirements: continue
