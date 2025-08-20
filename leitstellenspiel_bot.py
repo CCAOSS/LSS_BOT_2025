@@ -3,7 +3,7 @@ import json
 import os
 import sys
 import threading
-import tempfile # Füge diesen Import oben bei den anderen hinzu
+import tempfile
 import tkinter as tk
 from tkinter import ttk
 from collections import Counter
@@ -151,6 +151,7 @@ def setup_driver():
     """
     chrome_options = Options()
     chrome_options.add_argument("--headless"); chrome_options.add_argument("--window-size=1920,1080")
+    chrome_options.add_argument("--mute-audio")
     chrome_options.add_argument("--log-level=3"); chrome_options.add_argument("--disable-gpu"); chrome_options.add_argument("--no-sandbox")
 
     # --- NEU: Einzigartiges Nutzerverzeichnis erstellen ---
