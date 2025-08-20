@@ -200,9 +200,6 @@ def get_mission_requirements(driver, wait, player_inventory, given_patients):
             # Hilfsfunktion für konsistente Namens-Bereinigung
             def normalize_name(name):
                 clean = name.split('(')[0].strip().replace("Benötigte ", "")
-                if clean.endswith("kräne"): clean = clean.replace("kräne", "kran")
-                elif clean.endswith("wägen"): clean = clean.replace("wägen", "wagen")
-                elif clean.endswith("leitern"): clean = clean.replace("leitern", "leiter")
                 return translation_map.get(clean, clean)
 
             # --- PHASE 1: Alle Rohdaten aus der Tabelle sammeln ---
@@ -720,8 +717,10 @@ def main_bot_logic(gui_vars):
                     if "[Verband]" in mission['name'] or mission['id'] in dispatched_mission_ids: continue
                     
                     if mission['timeleft'] > MAX_START_DELAY_SECONDS:
+                        gui_vars['status'].set(f"Einsatz startet erst in {mission['timeleft']} - überspringt")
                         print(f"Info: Ignoriere zukünftigen Einsatz '{mission['name']}' (Start in {mission['timeleft'] // 60} min)"); continue
                     
+                    print(f"-----------------{mission['name']}-----------------")
                     gui_vars['mission_name'].set(f"({i+1}/{len(mission_data)}) {mission['name']}"); driver.get(mission['url'])
 
                     existing_patients = mission["patienten"]
@@ -729,6 +728,7 @@ def main_bot_logic(gui_vars):
                     if not raw_requirements: continue
                     
                     if mission['timeleft'] > 0 and raw_requirements.get('credits', 0) < MINIMUM_CREDITS:
+                        gui_vars['status'].set(f"Event bringt zuwenig credits {raw_requirements.get('credits', 0)} - überspringt")
                         print(f"Info: Ignoriere unrentablen zukünftigen Einsatz '{mission['name']}' (Credits: {raw_requirements.get('credits', 0)} < {MINIMUM_CREDITS})"); continue
 
                     # Anforderungs-Aufbereitung bleibt gleich...
