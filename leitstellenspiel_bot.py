@@ -150,16 +150,23 @@ def setup_driver():
     temporäres Nutzerverzeichnis zu, um Konflikte zu vermeiden.
     """
     chrome_options = Options()
-    chrome_options.add_argument("--headless"); chrome_options.add_argument("--window-size=1920,1080")
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--window-size=1920,1080")
     chrome_options.add_argument("--mute-audio")
-    chrome_options.add_argument("--log-level=3"); chrome_options.add_argument("--disable-gpu"); chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--log-level=3")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--no-sandbox")
+    
+    # ================================================================= #
+    # NEUE, STABILISIERENDE FLAGS                                       #
+    # ================================================================= #
+    chrome_options.add_argument("--disable-dev-shm-usage") # Verhindert Abstürze bei wenig Arbeitsspeicher
+    chrome_options.add_argument("--disable-extensions") # Deaktiviert Erweiterungen, die stören könnten
+    # ================================================================= #
 
-    # --- NEU: Einzigartiges Nutzerverzeichnis erstellen ---
-    # Erstellt einen zufälligen, temporären Ordner für diese Sitzung
     user_data_dir = tempfile.mkdtemp()
     chrome_options.add_argument(f"--user-data-dir={user_data_dir}")
     
-    # Betriebssystem-Erkennung (bleibt unverändert)
     if sys.platform.startswith('linux'):
         print("Info: Linux-Betriebssystem (Raspberry Pi) erkannt.")
         user_agent = "Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36"
@@ -169,9 +176,13 @@ def setup_driver():
         user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
         service = ChromeService(executable_path=resource_path("chromedriver.exe"))
     
-    chrome_options.add_argument(f'user-agent={user_agent}'); chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"]); chrome_options.add_experimental_option('useAutomationExtension', False)
+    chrome_options.add_argument(f'user-agent={user_agent}')
+    chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    chrome_options.add_experimental_option('useAutomationExtension', False)
+    
     driver = webdriver.Chrome(service=service, options=chrome_options)
-    driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"); return driver
+    driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+    return driver
     
 
     
@@ -608,51 +619,74 @@ def load_vehicle_id_map(file_path=resource_path("vehicle_id.json")):
     except json.JSONDecodeError:
         print(f"FEHLER: Die Datei '{file_path}' hat ein ungültiges JSON-Format."); return None
 
+def save_vehicle_database(database, file_path=resource_path("fahrzeug_datenbank.json")):
+    """Speichert die (ggf. erweiterte) Fahrzeug-Datenbank zurück in die JSON-Datei."""
+    try:
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(database, f, indent=4, ensure_ascii=False)
+        print("Info: Fahrzeug-Datenbank wurde erfolgreich mit neuen Fahrzeugen aktualisiert.")
+    except Exception as e:
+        print(f"FEHLER: Konnte die Fahrzeug-Datenbank nicht speichern: {e}")
+
 # Ersetze die alte Funktion komplett durch diese neue Version
 def get_player_vehicle_inventory(driver, wait):
     """
-    **KORRIGIERT:** Timeout behoben. Liest die 'vehicle_type_id' jetzt
-    korrekt vom <img>-Tag innerhalb jeder Tabellenzeile aus.
+    **KORRIGIERT & ERWEITERT:** Liest den Fuhrpark ein, fügt unbekannte
+    Fahrzeuge automatisch zur In-Memory-Datenbank hinzu und meldet,
+    ob eine Aktualisierung stattgefunden hat.
     """
     print("Info: Lese den kompletten Fuhrpark (Inventar) ein...")
     
     vehicle_id_map = load_vehicle_id_map()
     if not vehicle_id_map:
         print("WARNUNG: Fahrzeug-ID-Map konnte nicht geladen werden. Inventarprüfung wird ungenau sein.")
-        return set()
+        return set(), False # Gibt jetzt ein Tupel zurück
 
     inventory = set()
+    database_updated = False # Ein Flag, um zu verfolgen, ob Änderungen vorgenommen wurden
     try:
         driver.get("https://www.leitstellenspiel.de/vehicles")
         
-        # Warte einfach auf die Tabellenzeilen, ohne ein spezielles Attribut zu fordern
         vehicle_rows = wait.until(EC.presence_of_all_elements_located((By.XPATH, "//tbody/tr")))
         print(f"Info: {len(vehicle_rows)} Zeilen in der Fahrzeugtabelle gefunden. Analysiere...")
 
         for row in vehicle_rows:
             try:
-                # SUCHE das <img>-Tag INNERHALB der aktuellen Zeile und lies dort das Attribut aus.
                 image_tag = row.find_element(By.XPATH, ".//img[@vehicle_type_id]")
                 vehicle_id = image_tag.get_attribute('vehicle_type_id')
                 
                 if vehicle_id:
-                    # Finde den passenden Namen in unserer ID-Map
                     vehicle_name = vehicle_id_map.get(vehicle_id)
                     if vehicle_name:
                         inventory.add(vehicle_name)
-                    else:
-                        print(f"Warnung: Unbekannte Fahrzeug-ID '{vehicle_id}' im Inventar gefunden.")
+                        
+                        # ================================================================= #
+                        # HIER IST DIE NEUE LOGIK ZUM HINZUFÜGEN                            #
+                        # ================================================================= #
+                        if vehicle_name not in VEHICLE_DATABASE:
+                            print(f"--> NEUES FAHRZEUG: '{vehicle_name}' wird zur Datenbank hinzugefügt.")
+
+                            # Erstelle den neuen Standard-Eintrag im Dictionary
+                            VEHICLE_DATABASE[vehicle_name] = {
+                                "fraktion": "",
+                                "personal": 0, # Wir verwenden 0 als Zahl für Konsistenz im Code
+                                "typ": [vehicle_name]
+                            }
+                            database_updated = True # Setze das Flag, damit wir später speichern
+                        # ================================================================= #
+                            
+                else:
+                    print(f"Warnung: Unbekannte Fahrzeug-ID '{vehicle_id}' im Inventar gefunden.")
             except NoSuchElementException:
-                # Ignoriere Zeilen, die kein passendes <img>-Tag haben (z.B. Kopfzeilen, Trenner)
                 continue
         
-        print(f"Info: Inventar mit {len(inventory)} einzigartigen Fahrzeugtypen erfolgreich erstellt: {inventory}")
+        print(f"Info: Inventar mit {len(inventory)} einzigartigen Fahrzeugtypen erfolgreich erstellt.")
         
     except Exception as e:
         print(f"FEHLER: Konnte den Fuhrpark nicht einlesen: {e}")
         traceback.print_exc()
             
-    return inventory
+    return inventory, database_updated # Gibt das Inventar und das Update-Flag zurück
 
 # -----------------------------------------------------------------------------------
 # HAUPT-THREAD FÜR DIE BOT-LOGIK
@@ -663,6 +697,7 @@ def main_bot_logic(gui_vars):
     last_check_date = None; bonus_checked_today = False
     try:
         gui_vars['status'].set("Initialisiere..."); driver = setup_driver(); wait = WebDriverWait(driver, 30)
+        driver.set_page_load_timeout(45)
         gui_vars['status'].set("Logge ein..."); driver.get("https://www.leitstellenspiel.de/users/sign_in")
         wait.until(EC.visibility_of_element_located((By.ID, "user_email"))).send_keys(LEITSTELLENSPIEL_USERNAME)
         driver.find_element(By.ID, "user_password").send_keys(LEITSTELLENSPIEL_PASSWORD)
@@ -674,7 +709,9 @@ def main_bot_logic(gui_vars):
         
         gui_vars['status'].set("Warte auf Hauptseite..."); wait.until(EC.presence_of_element_located((By.ID, "missions_outer"))); gui_vars['status'].set("Login erfolgreich! Bot aktiv.")
         send_discord_notification(f"Bot erfolgreich gestartet auf Account: **{LEITSTELLENSPIEL_USERNAME}**")
-        player_inventory = get_player_vehicle_inventory(driver, wait)
+        player_inventory, db_updated = get_player_vehicle_inventory(driver, wait)
+        if db_updated:
+          save_vehicle_database(VEHICLE_DATABASE)
         
         while True:
             if gui_vars['stop_event'].is_set(): break
