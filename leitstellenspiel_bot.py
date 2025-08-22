@@ -374,6 +374,7 @@ def find_best_vehicle_combination(requirements, available_vehicles, vehicle_data
     needed_vehicle_options_list = [options for options in needed_vehicle_options_list if "RTW" not in options]
     rtws_to_add = min(patient_bedarf, 15)
     final_rtw_bedarf = max(explicit_rtw_count, rtws_to_add)
+    print(f"DEBUG: RTW BEDARF {final_rtw_bedarf}x")
     for _ in range(final_rtw_bedarf):
         needed_vehicle_options_list.append(["RTW"])
 
