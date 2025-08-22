@@ -1,131 +1,914 @@
 {
     "// -------------------- FEUERWEHR --------------------": {},
-
     "// --EINSATZLEITUNG / SONSTIG": {},
-    "ELW 2": { "fraktion": "FW", "kennung": "13/", "personal": 3, "typ": ["ELW 2"] },
-    "ELW 1": { "fraktion": "FW", "kennung": "12/", "personal": 3, "typ": ["ELW 1"] },
-    "KdoW": { "fraktion": "FW", "kennung": "10/", "personal": 3, "typ": ["ELW 1"] },
-    "MZF": { "fraktion": "FW", "kennung": "11/", "personal": 3, "typ": ["ELW 1"] },
-    "MTW": { "fraktion": "FW", "kennung": "14/", "personal": 9, "typ": ["Mannschaftstransportwagen"] },
-
+    "ELW 2": {
+        "fraktion": "FW",
+        "kennung": "13/",
+        "personal": 3,
+        "typ": [
+            "ELW 2"
+        ]
+    },
+    "ELW 1": {
+        "fraktion": "FW",
+        "kennung": "12/",
+        "personal": 3,
+        "typ": [
+            "ELW 1"
+        ]
+    },
+    "KdoW": {
+        "fraktion": "FW",
+        "kennung": "10/",
+        "personal": 3,
+        "typ": [
+            "ELW 1"
+        ]
+    },
+    "MZF": {
+        "fraktion": "FW",
+        "kennung": "11/",
+        "personal": 3,
+        "typ": [
+            "ELW 1"
+        ]
+    },
+    "MTW": {
+        "fraktion": "FW",
+        "kennung": "14/",
+        "personal": 9,
+        "typ": [
+            "Mannschaftstransportwagen"
+        ]
+    },
     "// --TANKLöschfahrzeug": {},
-    "TLF 16/45": { "fraktion": "FW", "kennung": "23/", "personal": 3, "typ": ["TankLöschfahrzeug", "Löschfahrzeug"], "wasser": 4500, "schaummittel": 750 },
-    "TLF 2000": { "fraktion": "FW", "kennung": "22/", "personal": 3, "typ": ["TankLöschfahrzeug", "Löschfahrzeug"], "wasser": 2000, "schaummittel": 60 },
-    "TLF 3000": { "fraktion": "FW", "kennung": "21/", "personal": 3, "typ": ["TankLöschfahrzeug", "Löschfahrzeug"], "wasser": 3000, "schaummittel": 120 },
-    "TLF 4000": { "fraktion": "FW", "kennung": "23/", "personal": 3, "typ": ["TankLöschfahrzeug", "Löschfahrzeug"], "wasser": 4000, "schaummittel": 500 },
-    "PTLF 4000": { "fraktion": "FW", "kennung": "23/", "personal": 3, "typ": ["TankLöschfahrzeug", "Löschfahrzeug"], "wasser": 4000, "schaummittel": 1000 },
-    "GTLF": { "fraktion": "FW", "kennung": "29/", "personal": 3, "typ": ["TankLöschfahrzeug", "Löschfahrzeug"], "wasser": 10000, "schaummittel": 1500 },
-    "Tankwagen": { "fraktion": "FW", "kennung": "29/", "personal": 3, "typ": ["TankLöschfahrzeug"], "wasser": 20000, "schaummittel": 0 },
-
+    "TLF 16/45": {
+        "fraktion": "FW",
+        "kennung": "23/",
+        "personal": 3,
+        "typ": [
+            "TankLöschfahrzeug",
+            "Löschfahrzeug"
+        ],
+        "wasser": 4500,
+        "schaummittel": 750
+    },
+    "TLF 2000": {
+        "fraktion": "FW",
+        "kennung": "22/",
+        "personal": 3,
+        "typ": [
+            "TankLöschfahrzeug",
+            "Löschfahrzeug"
+        ],
+        "wasser": 2000,
+        "schaummittel": 60
+    },
+    "TLF 3000": {
+        "fraktion": "FW",
+        "kennung": "21/",
+        "personal": 3,
+        "typ": [
+            "TankLöschfahrzeug",
+            "Löschfahrzeug"
+        ],
+        "wasser": 3000,
+        "schaummittel": 120
+    },
+    "TLF 4000": {
+        "fraktion": "FW",
+        "kennung": "23/",
+        "personal": 3,
+        "typ": [
+            "TankLöschfahrzeug",
+            "Löschfahrzeug"
+        ],
+        "wasser": 4000,
+        "schaummittel": 500
+    },
+    "PTLF 4000": {
+        "fraktion": "FW",
+        "kennung": "23/",
+        "personal": 3,
+        "typ": [
+            "TankLöschfahrzeug",
+            "Löschfahrzeug"
+        ],
+        "wasser": 4000,
+        "schaummittel": 1000
+    },
+    "GTLF": {
+        "fraktion": "FW",
+        "kennung": "29/",
+        "personal": 3,
+        "typ": [
+            "TankLöschfahrzeug",
+            "Löschfahrzeug"
+        ],
+        "wasser": 10000,
+        "schaummittel": 1500
+    },
+    "Tankwagen": {
+        "fraktion": "FW",
+        "kennung": "29/",
+        "personal": 3,
+        "typ": [
+            "TankLöschfahrzeug"
+        ],
+        "wasser": 20000,
+        "schaummittel": 0
+    },
     "// --Drehleiter / Kranfahrzeuge": {},
-    "DLK 23": { "fraktion": "FW", "kennung": "30/", "personal": 3, "typ": ["Drehleiter"] },
-    "DLK 18": { "fraktion": "FW", "kennung": "31/", "personal": 3, "typ": ["Drehleiter"] },
-    "DLK 12": { "fraktion": "FW", "kennung": "32/", "personal": 3, "typ": ["Drehleiter"] },
-    "FwK": { "fraktion": "FW", "kennung": "34/", "personal": 3, "typ": ["FwK"] },
-    "WLF": { "fraktion": "FW", "kennung": "35/", "personal": 3, "typ": ["Wechselladerfahrzeug"] },
-
+    "DLK 23": {
+        "fraktion": "FW",
+        "kennung": "30/",
+        "personal": 3,
+        "typ": [
+            "Drehleiter"
+        ]
+    },
+    "DLK 18": {
+        "fraktion": "FW",
+        "kennung": "31/",
+        "personal": 3,
+        "typ": [
+            "Drehleiter"
+        ]
+    },
+    "DLK 12": {
+        "fraktion": "FW",
+        "kennung": "32/",
+        "personal": 3,
+        "typ": [
+            "Drehleiter"
+        ]
+    },
+    "FwK": {
+        "fraktion": "FW",
+        "kennung": "34/",
+        "personal": 3,
+        "typ": [
+            "FwK"
+        ]
+    },
+    "WLF": {
+        "fraktion": "FW",
+        "kennung": "35/",
+        "personal": 3,
+        "typ": [
+            "Wechselladerfahrzeug"
+        ]
+    },
     "// --Löschfahrzeug": {},
-    "LF 20": { "fraktion": "FW", "kennung": "41/", "personal": 9, "typ": ["Löschfahrzeug"], "wasser": 2000, "schaummittel": 120 },
-    "LF 10": { "fraktion": "FW", "kennung": "43/", "personal": 9, "typ": ["Löschfahrzeug"], "wasser": 1200, "schaummittel": 120 },
-    "HLF 20": { "fraktion": "FW", "kennung": "40/", "personal": 9, "typ": ["Löschfahrzeug", "Rüstwagen"], "wasser": 2000, "schaummittel": 120 },
-    "HLF 10": { "fraktion": "FW", "kennung": "42/", "personal": 9, "typ": ["Löschfahrzeug", "Rüstwagen"], "wasser": 1600, "schaummittel": 120 },
-    "LF 8/6": { "fraktion": "FW", "kennung": "48/", "personal": 9, "typ": ["Löschfahrzeug"], "wasser": 600, "schaummittel": 60 },
-    "LF 20/16": { "fraktion": "FW", "personal": 9, "typ": ["Löschfahrzeug"], "wasser": 1600, "schaummittel": 150},
-    "TSF-W": { "fraktion": "FW", "kennung": "46/", "personal": 6, "typ": ["Löschfahrzeug"], "wasser": 750, "schaummittel": 60 },
-    "MLF": { "fraktion": "FW", "kennung": "47/", "personal": 6, "typ": ["Löschfahrzeug"], "wasser": 1000, "schaummittel": 150 },
-    "HLF Schiene": { "fraktion": "FW", "personal": 9, "typ": ["Löschfahrzeug", "Rüstwagen", "Bahnrettungsfahrzeuge"], "wasser": 1460, "schaummittel": 150},
-
+    "LF 20": {
+        "fraktion": "FW",
+        "kennung": "41/",
+        "personal": 9,
+        "typ": [
+            "Löschfahrzeug"
+        ],
+        "wasser": 2000,
+        "schaummittel": 120
+    },
+    "LF 10": {
+        "fraktion": "FW",
+        "kennung": "43/",
+        "personal": 9,
+        "typ": [
+            "Löschfahrzeug"
+        ],
+        "wasser": 1200,
+        "schaummittel": 120
+    },
+    "HLF 20": {
+        "fraktion": "FW",
+        "kennung": "40/",
+        "personal": 9,
+        "typ": [
+            "Löschfahrzeug",
+            "Rüstwagen"
+        ],
+        "wasser": 2000,
+        "schaummittel": 120
+    },
+    "HLF 10": {
+        "fraktion": "FW",
+        "kennung": "42/",
+        "personal": 9,
+        "typ": [
+            "Löschfahrzeug",
+            "Rüstwagen"
+        ],
+        "wasser": 1600,
+        "schaummittel": 120
+    },
+    "LF 8/6": {
+        "fraktion": "FW",
+        "kennung": "48/",
+        "personal": 9,
+        "typ": [
+            "Löschfahrzeug"
+        ],
+        "wasser": 600,
+        "schaummittel": 60
+    },
+    "LF 20/16": {
+        "fraktion": "FW",
+        "personal": 9,
+        "typ": [
+            "Löschfahrzeug"
+        ],
+        "wasser": 1600,
+        "schaummittel": 150
+    },
+    "TSF-W": {
+        "fraktion": "FW",
+        "kennung": "46/",
+        "personal": 6,
+        "typ": [
+            "Löschfahrzeug"
+        ],
+        "wasser": 750,
+        "schaummittel": 60
+    },
+    "MLF": {
+        "fraktion": "FW",
+        "kennung": "47/",
+        "personal": 6,
+        "typ": [
+            "Löschfahrzeug"
+        ],
+        "wasser": 1000,
+        "schaummittel": 150
+    },
+    "HLF Schiene": {
+        "fraktion": "FW",
+        "personal": 9,
+        "typ": [
+            "Löschfahrzeug",
+            "Rüstwagen",
+            "Bahnrettungsfahrzeuge"
+        ],
+        "wasser": 1460,
+        "schaummittel": 150
+    },
     "// --GERÄTEWAGEN": {},
-    "GW-Lüfter": { "fraktion": "FW", "kennung": "lüfter/59/", "personal": 2, "typ": ["Lüfter"] },
-    "GW-Öl": { "fraktion": "FW", "kennung": "51/", "personal": 2, "typ": ["GW-Öl"] },
-    "GW-Höhenrettung": { "fraktion": "FW", "kennung": "59/", "personal": 9, "typ": ["GW-Höhenrettung"] },
-    "GW-A": { "fraktion": "FW", "kennung": "53/", "personal": 3, "typ": ["GW-A"] },
-    "GW-L2": { "fraktion": "FW", "kennung": "58/", "personal": 3, "typ": ["GW-L2"] },
-    "GW-L2-Wasser": { "fraktion": "FW", "kennung": "56/", "personal": 2, "typ": ["Schlauchwagen"] },
-    "SW-KatS": { "fraktion": "FW", "kennung": "58/", "personal": 3, "typ": ["Schlauchwagen"]},
-    "SW 2000-Tr": { "fraktion": "FW", "kennung": "58/", "personal": 3, "typ": ["Schlauchwagen"]},
-
-    "RW": { "fraktion": "FW", "kennung": "61/", "personal": 3, "typ": ["Rüstwagen"] },
-
+    "GW-Lüfter": {
+        "fraktion": "FW",
+        "kennung": "lüfter/59/",
+        "personal": 2,
+        "typ": [
+            "Lüfter"
+        ]
+    },
+    "GW-Öl": {
+        "fraktion": "FW",
+        "kennung": "51/",
+        "personal": 2,
+        "typ": [
+            "GW-Öl"
+        ]
+    },
+    "GW-Höhenrettung": {
+        "fraktion": "FW",
+        "kennung": "59/",
+        "personal": 9,
+        "typ": [
+            "GW-Höhenrettung"
+        ]
+    },
+    "GW-A": {
+        "fraktion": "FW",
+        "kennung": "53/",
+        "personal": 3,
+        "typ": [
+            "GW-A"
+        ]
+    },
+    "GW-L2": {
+        "fraktion": "FW",
+        "kennung": "58/",
+        "personal": 3,
+        "typ": [
+            "GW-L2"
+        ]
+    },
+    "GW-L2-Wasser": {
+        "fraktion": "FW",
+        "kennung": "56/",
+        "personal": 2,
+        "typ": [
+            "Schlauchwagen"
+        ]
+    },
+    "SW-KatS": {
+        "fraktion": "FW",
+        "kennung": "58/",
+        "personal": 3,
+        "typ": [
+            "Schlauchwagen"
+        ]
+    },
+    "SW 2000-Tr": {
+        "fraktion": "FW",
+        "kennung": "58/",
+        "personal": 3,
+        "typ": [
+            "Schlauchwagen"
+        ]
+    },
+    "RW": {
+        "fraktion": "FW",
+        "kennung": "61/",
+        "personal": 3,
+        "typ": [
+            "Rüstwagen"
+        ]
+    },
     "// --GEFAHRGUT": {},
-    "Dekon-P": { "fraktion": "FW", "kennung": "67/", "personal": 6, "typ": ["Dekon-P"] },
-    "GW-Messtechnik": { "fraktion": "FW", "kennung": "66/", "personal": 3, "typ": ["GW-Mess"] },
-    "GW-Gefahrgut": { "fraktion": "FW", "kennung": "52/", "personal": 3, "typ": ["GW-Gefahrgut"] },
-
+    "Dekon-P": {
+        "fraktion": "FW",
+        "kennung": "67/",
+        "personal": 6,
+        "typ": [
+            "Dekon-P"
+        ]
+    },
+    "GW-Messtechnik": {
+        "fraktion": "FW",
+        "kennung": "66/",
+        "personal": 3,
+        "typ": [
+            "GW-Mess"
+        ]
+    },
+    "GW-Gefahrgut": {
+        "fraktion": "FW",
+        "kennung": "52/",
+        "personal": 3,
+        "typ": [
+            "GW-Gefahrgut"
+        ]
+    },
     "// --WERKFEUERWEHR": {},
-    "GW-Werkfeuerwehr": { "fraktion": "FW", "kennung": "59/", "personal": 3, "typ": ["GW-Werkfeuerwehr"] },
-    "SLF": { "fraktion": "FW", "kennung": "27/", "personal": 3, "typ": ["SLF"], "wasser": 3500, "schaummittel": 5000},
-    "Turbolöscher": { "fraktion": "FW", "kennung": "29/", "personal": 3, "typ": ["Turbolöscher"]},
-    "ULF mit Löscharm": { "fraktion": "FW", "kennung": "29/", "personal": 3, "typ": ["ULF mit Löscharm"], "wasser": 5000, "schaummittel": 3000},
-    "TM 50": { "fraktion": "FW", "kennung": "33/", "personal": 3, "typ": ["Teleskopmasten"]},
-
+    "GW-Werkfeuerwehr": {
+        "fraktion": "FW",
+        "kennung": "59/",
+        "personal": 3,
+        "typ": [
+            "GW-Werkfeuerwehr"
+        ]
+    },
+    "SLF": {
+        "fraktion": "FW",
+        "kennung": "27/",
+        "personal": 3,
+        "typ": [
+            "SLF"
+        ],
+        "wasser": 3500,
+        "schaummittel": 5000
+    },
+    "Turbolöscher": {
+        "fraktion": "FW",
+        "kennung": "29/",
+        "personal": 3,
+        "typ": [
+            "Turbolöscher"
+        ]
+    },
+    "ULF mit Löscharm": {
+        "fraktion": "FW",
+        "kennung": "29/",
+        "personal": 3,
+        "typ": [
+            "ULF mit Löscharm"
+        ],
+        "wasser": 5000,
+        "schaummittel": 3000
+    },
+    "TM 50": {
+        "fraktion": "FW",
+        "kennung": "33/",
+        "personal": 3,
+        "typ": [
+            "Teleskopmasten"
+        ]
+    },
     "// --SONDERFAHRZEUGE": {},
-    "FLB": { "fraktion": "FW", "kennung": "99/", "personal": 4, "typ": ["Löschboot"], "wasser": 10000, "schaummittel": 1000 },
-    
+    "FLB": {
+        "fraktion": "FW",
+        "kennung": "99/",
+        "personal": 4,
+        "typ": [
+            "Löschboot"
+        ],
+        "wasser": 10000,
+        "schaummittel": 1000
+    },
     "// -------------------- RETTUNGSDIENST --------------------": {},
-    "RTW": { "fraktion": "RD", "kennung": "71/", "personal": 2, "typ": ["RTW"], "patienten_kapazitaet": 1 },
-    "KTW": { "fraktion": "RD", "kennung": "72/", "personal": 2, "typ": ["KTW"], "patienten_kapazitaet": 1 },
-    "KTW Typ B": { "fraktion": "RD", "kennung": "73/", "personal": 2, "typ": ["KTW Typ B"], "patienten_kapazitaet": 1 },
-    "NEF": { "fraktion": "RD", "kennung": "76/", "personal": 1, "typ": ["NEF"] },
-    "NAW": { "fraktion": "RD", "kennung": "70/", "personal": 3, "typ": ["RTW", "NEF"], "patienten_kapazitaet": 1 },
-    "ITW": { "fraktion": "RD", "kennung": "70/", "personal": 3, "typ": ["RTW", "NEF", "Intensivtransportwagen"], "patienten_kapazitaet": 1 },
-
-    "MTW TeSi": { "fraktion": "RD", "personal": 2, "typ": ["MTW TeSi"] },
-    "GW TeSi": { "fraktion": "RD", "personal": 2, "typ": ["GW TeSi"] },
-    "Anh TeSi": { "fraktion": "RD", "personal": 2, "typ": ["Anh TeSi"] },
-    "LKW Technik (Notstrom)": { "fraktion": "RD", "personal": 2, "typ": ["LKW Technik (Notstrom)"] },
-
-    "GW-San": { "fraktion": "RD", "personal": 6, "typ": "GW-San"},
-    "Rettungshundefahrzeug": { "fraktion": "RD", "personal": 5, "typ": ["Rettungshundestaffeln"]},
-    "GW UAS": { "fraktion": "RD", "kennung": "drohne/59/", "personal": 4, "typ": ["Drohnenfahrzeug"]},
-
-    "ELW 1 (SEG)": { "fraktion": "RD", "personal": 2, "typ": ["ELW 1 (SEG)"] },
-    "KdoW-LNA": { "fraktion": "RD", "kennung": "Land 7/", "personal": 1, "typ": ["KdoW-LNA"] },
-    "KdoW-OrgL": { "fraktion": "RD", "kennung": "Land 8/", "personal": 1, "typ": ["KdoW-OrgL"] },
-
-    "RTH": { "fraktion": "RD", "kennung": "Christoph", "personal": 3, "typ": ["RTH"], "patienten_kapazitaet": 1 },
-    "GRTW": { "fraktion": "RD", "kennung": "75/", "personal": 6, "typ": ["RTW"], "patienten_kapazitaet": 4 },
-
+    "RTW": {
+        "fraktion": "RD",
+        "kennung": "71/",
+        "personal": 2,
+        "typ": [
+            "RTW"
+        ],
+        "patienten_kapazitaet": 1
+    },
+    "KTW": {
+        "fraktion": "RD",
+        "kennung": "72/",
+        "personal": 2,
+        "typ": [
+            "KTW"
+        ],
+        "patienten_kapazitaet": 1
+    },
+    "KTW Typ B": {
+        "fraktion": "RD",
+        "kennung": "73/",
+        "personal": 2,
+        "typ": [
+            "KTW Typ B"
+        ],
+        "patienten_kapazitaet": 1
+    },
+    "NEF": {
+        "fraktion": "RD",
+        "kennung": "76/",
+        "personal": 1,
+        "typ": [
+            "NEF"
+        ]
+    },
+    "NAW": {
+        "fraktion": "RD",
+        "kennung": "70/",
+        "personal": 3,
+        "typ": [
+            "RTW",
+            "NEF"
+        ],
+        "patienten_kapazitaet": 1
+    },
+    "ITW": {
+        "fraktion": "RD",
+        "kennung": "70/",
+        "personal": 3,
+        "typ": [
+            "RTW",
+            "NEF",
+            "Intensivtransportwagen"
+        ],
+        "patienten_kapazitaet": 1
+    },
+    "MTW TeSi": {
+        "fraktion": "RD",
+        "personal": 2,
+        "typ": [
+            "MTW TeSi"
+        ]
+    },
+    "GW TeSi": {
+        "fraktion": "RD",
+        "personal": 2,
+        "typ": [
+            "GW TeSi"
+        ]
+    },
+    "Anh TeSi": {
+        "fraktion": "RD",
+        "personal": 2,
+        "typ": [
+            "Anh TeSi"
+        ]
+    },
+    "LKW Technik (Notstrom)": {
+        "fraktion": "RD",
+        "personal": 2,
+        "typ": [
+            "LKW Technik (Notstrom)"
+        ]
+    },
+    "GW-San": {
+        "fraktion": "RD",
+        "personal": 6,
+        "typ": "GW-San"
+    },
+    "Rettungshundefahrzeug": {
+        "fraktion": "RD",
+        "personal": 5,
+        "typ": [
+            "Rettungshundestaffeln"
+        ]
+    },
+    "GW UAS": {
+        "fraktion": "RD",
+        "kennung": "drohne/59/",
+        "personal": 4,
+        "typ": [
+            "Drohnenfahrzeug"
+        ]
+    },
+    "ELW 1 (SEG)": {
+        "fraktion": "RD",
+        "personal": 2,
+        "typ": [
+            "ELW 1 (SEG)"
+        ]
+    },
+    "KdoW-LNA": {
+        "fraktion": "RD",
+        "kennung": "Land 7/",
+        "personal": 1,
+        "typ": [
+            "KdoW-LNA"
+        ]
+    },
+    "KdoW-OrgL": {
+        "fraktion": "RD",
+        "kennung": "Land 8/",
+        "personal": 1,
+        "typ": [
+            "KdoW-OrgL"
+        ]
+    },
+    "RTH": {
+        "fraktion": "RD",
+        "kennung": "Christoph",
+        "personal": 3,
+        "typ": [
+            "RTH"
+        ],
+        "patienten_kapazitaet": 1
+    },
+    "GRTW": {
+        "fraktion": "RD",
+        "kennung": "75/",
+        "personal": 6,
+        "typ": [
+            "RTW"
+        ],
+        "patienten_kapazitaet": 4
+    },
     "// -------------------- POLIZEI & Sondereinheiten --------------------": {},
-    "FuStW": { "fraktion": "POL", "personal": 2, "typ": ["Funkstreifenwagen"] },
-    "FuStW (DGL)": { "fraktion": "POL", "personal": 2, "typ": ["Funkstreifenwagen (Dienstgruppenleitung)", "Funkstreifenwagen"]},
-    "Zivilstreifenwagen": { "fraktion": "POL", "personal":2, "typ": ["Zivilstreifenwagen"] },
-    "DHuFüKW": { "fraktion": "POL", "personal":2, "typ": ["DHuFüKW"] },
-
-    "SEK - ZF": { "fraktion": "POL", "personal": 5, "typ": ["SEK-Fahrzeuge"] },
-    "SEK - MTF": { "fraktion": "POL", "personal": 5, "typ": ["SEK-Fahrzeuge"] },
-    "MEK - ZF": { "fraktion": "POL", "personal": 5, "typ": ["MEK-Fahrzeuge"] },
-    "MEK - MTF": { "fraktion": "POL", "personal": 5, "typ": ["MEK-Fahrzeuge"] },
-
-    "WaWe": { "fraktion": "POL", "kennung": "WaWe", "personal": 5, "typ": ["Wasserwerfer"] },
-    "GruKw": { "fraktion": "POL", "personal": 5, "typ": ["GruKw"] },
-    "leBefKw": { "fraktion": "POL", "personal": 5, "typ": ["leBefKw"] },
-    "FüKW (Polizei)": { "fraktion": "POL", "personal": 5, "typ": ["FüKW (Polizei)"] },
-    "LauKw": { "fraktion": "POL", "personal": 5, "typ": ["LauKw"] },
-
-    "Polizeihubschrauber": { "fraktion": "POL", "personal": 3, "typ": ["Polizeihubschrauber"] },
-
+    "FuStW": {
+        "fraktion": "POL",
+        "personal": 2,
+        "typ": [
+            "Funkstreifenwagen"
+        ]
+    },
+    "FuStW (DGL)": {
+        "fraktion": "POL",
+        "personal": 2,
+        "typ": [
+            "Funkstreifenwagen (Dienstgruppenleitung)",
+            "Funkstreifenwagen"
+        ]
+    },
+    "Zivilstreifenwagen": {
+        "fraktion": "POL",
+        "personal": 2,
+        "typ": [
+            "Zivilstreifenwagen"
+        ]
+    },
+    "DHuFüKW": {
+        "fraktion": "POL",
+        "personal": 2,
+        "typ": [
+            "DHuFüKW"
+        ]
+    },
+    "SEK - ZF": {
+        "fraktion": "POL",
+        "personal": 5,
+        "typ": [
+            "SEK-Fahrzeuge"
+        ]
+    },
+    "SEK - MTF": {
+        "fraktion": "POL",
+        "personal": 5,
+        "typ": [
+            "SEK-Fahrzeuge"
+        ]
+    },
+    "MEK - ZF": {
+        "fraktion": "POL",
+        "personal": 5,
+        "typ": [
+            "MEK-Fahrzeuge"
+        ]
+    },
+    "MEK - MTF": {
+        "fraktion": "POL",
+        "personal": 5,
+        "typ": [
+            "MEK-Fahrzeuge"
+        ]
+    },
+    "WaWe": {
+        "fraktion": "POL",
+        "kennung": "WaWe",
+        "personal": 5,
+        "typ": [
+            "Wasserwerfer"
+        ]
+    },
+    "GruKw": {
+        "fraktion": "POL",
+        "personal": 5,
+        "typ": [
+            "GruKw"
+        ]
+    },
+    "leBefKw": {
+        "fraktion": "POL",
+        "personal": 5,
+        "typ": [
+            "leBefKw"
+        ]
+    },
+    "FüKW (Polizei)": {
+        "fraktion": "POL",
+        "personal": 5,
+        "typ": [
+            "FüKW (Polizei)"
+        ]
+    },
+    "LauKw": {
+        "fraktion": "POL",
+        "personal": 5,
+        "typ": [
+            "LauKw"
+        ]
+    },
+    "Polizeihubschrauber": {
+        "fraktion": "POL",
+        "personal": 3,
+        "typ": [
+            "Polizeihubschrauber"
+        ]
+    },
     "// -------------------- THW --------------------": {},
-    "GKW": { "fraktion": "THW", "personal": 9, "typ": ["GKW"] },
-    "MTW-TZ": { "fraktion": "THW", "personal": 9, "typ": ["MTW-TZ"] },
-    "MTW-FGr K": { "fraktion": "THW", "personal": 9, "typ": ["MTW-FGr K"] },
-    "MTW-O": { "fraktion": "THW", "personal": 5, "typ": "Rettungshundestaffeln"},
-    "MzGW (FGr N)": { "fraktion": "THW", "personal": 9, "typ": "MzGW (FGr N)"},
-    "MLW 5": { "fraktion": "THW", "personal": 9, "typ": ["MLW 5"] },
-    "MzGW SB": { "fraktion": "THW", "personal": 9, "typ": ["MzGW SB"] },
-    "Anh Hund": { "fraktion": "THW", "personal": 0, "typ": "Rettungshundestaffeln"},
-    "LKW K 9": { "fraktion": "THW", "personal": 2, "typ": ["LKW K 9"] },
-    "FüKw": { "fraktion": "THW", "personal": 4, "typ": ["Führungskraftwagen (FüKw)"] },
-    "BRmG R": { "fraktion": "THW", "personal": 2, "typ": ["BRmG R"] },
-    "Anh DLE": { "fraktion": "THW", "personal": 0, "typ": ["Anh DLE"] },
-    "NEA50": { "fraktion": "THW", "personal": 0, "typ": ["NEA50"] },
-    
+    "GKW": {
+        "fraktion": "THW",
+        "personal": 9,
+        "typ": [
+            "GKW"
+        ]
+    },
+    "MTW-TZ": {
+        "fraktion": "THW",
+        "personal": 9,
+        "typ": [
+            "MTW-TZ"
+        ]
+    },
+    "MTW-FGr K": {
+        "fraktion": "THW",
+        "personal": 9,
+        "typ": [
+            "MTW-FGr K"
+        ]
+    },
+    "MTW-O": {
+        "fraktion": "THW",
+        "personal": 5,
+        "typ": "Rettungshundestaffeln"
+    },
+    "MzGW (FGr N)": {
+        "fraktion": "THW",
+        "personal": 9,
+        "typ": "MzGW (FGr N)"
+    },
+    "MLW 5": {
+        "fraktion": "THW",
+        "personal": 9,
+        "typ": [
+            "MLW 5"
+        ]
+    },
+    "MzGW SB": {
+        "fraktion": "THW",
+        "personal": 9,
+        "typ": [
+            "MzGW SB"
+        ]
+    },
+    "Anh Hund": {
+        "fraktion": "THW",
+        "personal": 0,
+        "typ": "Rettungshundestaffeln"
+    },
+    "LKW K 9": {
+        "fraktion": "THW",
+        "personal": 2,
+        "typ": [
+            "LKW K 9"
+        ]
+    },
+    "FüKw": {
+        "fraktion": "THW",
+        "personal": 4,
+        "typ": [
+            "Führungskraftwagen (FüKw)"
+        ]
+    },
+    "BRmG R": {
+        "fraktion": "THW",
+        "personal": 2,
+        "typ": [
+            "BRmG R"
+        ]
+    },
+    "Anh DLE": {
+        "fraktion": "THW",
+        "personal": 0,
+        "typ": [
+            "Anh DLE"
+        ]
+    },
+    "NEA50": {
+        "fraktion": "THW",
+        "personal": 0,
+        "typ": [
+            "NEA50"
+        ]
+    },
     "// -------------------- Wasserrettung --------------------": {},
-    "GW-Taucher": { "fraktion": "RD", "personal": 2, "typ": ["Tauchkraftwagen"] },
-    "GW-Wasserrettung": { "fraktion": "RD", "personal": 6, "typ": ["GW-Wasserrettung"] },
-    "MZB": { "fraktion": "RD", "personal": 0, "typ": ["Boote"] },
-
-     "// -------------------- Seenotrettung --------------------": {},
-    "Seenotrettungskreuzer": { "fraktion": "RD", "kennung": "100/", "personal": 0, "typ": ["Seenotrettungskreuzer"] },
-    "Seenotrettungsboot": { "fraktion": "RD", "kennung": "101/", "personal": 0, "typ": ["Seenotrettungsboot"] }
+    "GW-Taucher": {
+        "fraktion": "RD",
+        "personal": 2,
+        "typ": [
+            "Tauchkraftwagen"
+        ]
+    },
+    "GW-Wasserrettung": {
+        "fraktion": "RD",
+        "personal": 6,
+        "typ": [
+            "GW-Wasserrettung"
+        ]
+    },
+    "MZB": {
+        "fraktion": "RD",
+        "personal": 0,
+        "typ": [
+            "Boote"
+        ]
+    },
+    "// -------------------- Seenotrettung --------------------": {},
+    "Seenotrettungskreuzer": {
+        "fraktion": "RD",
+        "kennung": "100/",
+        "personal": 0,
+        "typ": [
+            "Seenotrettungskreuzer"
+        ]
+    },
+    "Seenotrettungsboot": {
+        "fraktion": "RD",
+        "kennung": "101/",
+        "personal": 0,
+        "typ": [
+            "Seenotrettungsboot"
+        ]
+    },
+    "AB-Einsatzleitung": {
+        "fraktion": "FW",
+        "personal": 0,
+        "typ": [
+            "AB-Einsatzleitung"
+        ]
+    },
+    "AB-Tank": {
+        "fraktion": "FW",
+        "personal": 0,
+        "typ": [
+            "AB-Tank"
+        ]
+    },
+    "Anh SwPu": {
+        "fraktion": "THW",
+        "personal": 0,
+        "typ": [
+            "Anh SwPu"
+        ]
+    },
+    "LF 16-TS": {
+        "fraktion": "FW",
+        "personal": 0,
+        "typ": [
+            "LF 16-TS"
+        ]
+    },
+    "GW-Küche": {
+        "fraktion": "FW",
+        "personal": 0,
+        "typ": [
+            "GW-Küche"
+        ]
+    },
+    "GW-Bt": {
+        "fraktion": "RD",
+        "personal": 0,
+        "typ": [
+            "GW-Bt"
+        ]
+    },
+    "Bt-Kombi": {
+        "fraktion": "RD",
+        "personal": 0,
+        "typ": [
+            "Bt-Kombi"
+        ]
+    },
+    "LKW 7 Lbw (FGr WP)": {
+        "fraktion": "THW",
+        "personal": 0,
+        "typ": [
+            "LKW 7 Lbw (FGr WP)"
+        ]
+    },
+    "WaWe 10": {
+        "fraktion": "POL",
+        "personal": 0,
+        "typ": [
+            "WaWe 10"
+        ]
+    },
+    "MTW-Verpflegung": {
+        "fraktion": "FW",
+        "personal": 0,
+        "typ": [
+            "MTW-Verpflegung"
+        ]
+    },
+    "FüKW (THW)": {
+        "fraktion": "THW",
+        "personal": 0,
+        "typ": [
+            "FüKW (THW)"
+        ]
+    },
+    "FmKW": {
+        "fraktion": "THW",
+        "personal": 0,
+        "typ": [
+            "FmKW"
+        ]
+    },
+    "Anh 7": {
+        "fraktion": "THW",
+        "personal": 0,
+        "typ": [
+            "Anh 7"
+        ]
+    },
+    "MLW 4": {
+        "fraktion": "THW",
+        "personal": 0,
+        "typ": [
+            "MLW 4"
+        ]
+    },
+    "Anh FüLa": {
+        "fraktion": "THW",
+        "personal": 0,
+        "typ": [
+            "Anh FüLa"
+        ]
+    },
+    "FüKomKW": {
+        "fraktion": "THW",
+        "personal": 0,
+        "typ": [
+            "FüKomKW"
+        ]
+    },
+    "SW 2000": {
+        "fraktion": "FW",
+        "personal": 3,
+        "typ": [
+            "SW 2000"
+        ]
+    },
+    "SW Kats": {
+        "fraktion": "FW",
+        "personal": 9,
+        "typ": [
+            "SW Kats"
+        ]
+    },
+    "GefKw": {
+        "fraktion": "POL",
+        "personal": 3,
+        "typ": [
+            "GefKw"
+        ]
+    }
 }
