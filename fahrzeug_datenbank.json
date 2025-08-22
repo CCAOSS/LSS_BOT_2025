@@ -508,7 +508,8 @@
         "kennung": "drohne/59/",
         "personal": 4,
         "typ": [
-            "Drohnenfahrzeug"
+            "Drohnenfahrzeug",
+            "Drohneneinheiten"
         ]
     },
     "ELW 1 (SEG)": {
