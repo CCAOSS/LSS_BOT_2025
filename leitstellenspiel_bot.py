@@ -217,6 +217,7 @@ def get_mission_requirements(driver, wait, player_inventory, given_patients):
             # ==============================================================================
             # NEUE, VEREINFACHTE LOGIK ZUR ANFORDERUNGS-VERARBEITUNG
             # ==============================================================================
+            prob_table = []
             for row in rows:
                 cells = row.find_elements(By.TAG_NAME, 'td')
                 if len(cells) < 2: continue
@@ -234,14 +235,20 @@ def get_mission_requirements(driver, wait, player_inventory, given_patients):
                     if normalized_prob_name in player_inventory:
                         # NUR DANN: Füge es zur Liste hinzu.
                         print(f"     -> Info: Anforderung für '{normalized_prob_name}' wird hinzugefügt (Wahrscheinlichkeit & im Inventar).")
-                        if count_text.isdigit():
-                            for _ in range(int(count_text)):
-                                raw_requirements['fahrzeuge'].append([normalized_prob_name])
+                        prob_table.append([normalized_prob_name])
                     else:
                         # Sonst: Ignoriere es.
                         print(f"     -> Info: Anforderung für '{normalized_prob_name}' wird ignoriert (Wahrscheinlichkeit & nicht im Inventar).")
                     continue # Springe zur nächsten Zeile
                 
+                # Prüft ob fahrzeug eine Wahrscheinlichkeit hatte
+                if clean_name in prob_table:
+                    print("Fahrzeug hatte eine Wahrscheinlichkeit!")
+                    if count_text.isdigit():
+                            for _ in range(int(count_text)):
+                                raw_requirements['fahrzeuge'].append(["Löschfahrzeug", "Tanklöschfahrzeug"])
+                    continue
+
                 # Dies ist der Code für alle normalen (festen) Anforderungen
                 req_lower_clean = clean_name.lower()
                 if any(keyword in req_lower_clean for keyword in ["schlauchwagen", "personal", "feuerwehrleute", "wasser", "schaummittel", "feuerlöschpumpe"]):
@@ -269,7 +276,7 @@ def get_mission_requirements(driver, wait, player_inventory, given_patients):
 
         except TimeoutException: 
             print("Info: No vehicle requirement table found.")
-        
+
         # Der Rest der Funktion (Credits, Patienten, etc.) bleibt unverändert
         try:
             credits_selector = "//td[normalize-space()='Credits im Durchschnitt']/following-sibling::td"
