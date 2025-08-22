@@ -5,7 +5,7 @@ import sys
 import threading
 import tempfile
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 from collections import Counter
 import traceback
 from datetime import date
@@ -58,10 +58,12 @@ if not VEHICLE_DATABASE:
     print("Bot wird beendet, da die Fahrzeug-Datenbank nicht geladen werden konnte."); time.sleep(10); sys.exit()
 
 # --- Bot-Konfiguration ---
-BOT_VERSION = "V6.2 - Final Logic"
+BOT_VERSION = "V1.0 - Release Build"
 PAUSE_IF_NO_VEHICLES_SECONDS = 300
 MAX_START_DELAY_SECONDS = 3600
 MINIMUM_CREDITS = 10000
+
+ADDED_TO_DATABASE = []
 
 # -----------------------------------------------------------------------------------
 # DIE KLASSE FÜR DAS STATUS-FENSTER (Version mit Pause/Stop-Logik)
@@ -184,8 +186,6 @@ def setup_driver():
     driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
     return driver
     
-
-    
 def get_mission_requirements(driver, wait, player_inventory, given_patients):
     """
     **FINAL VERSION (KORRIGIERT):** Behebt den Logikfehler bei der Verarbeitung
@@ -214,25 +214,32 @@ def get_mission_requirements(driver, wait, player_inventory, given_patients):
                 clean = name.split('(')[0].strip().replace("Benötigte ", "")
                 return translation_map.get(clean, clean)
 
-            # ==============================================================================
-            # NEUE, VEREINFACHTE LOGIK ZUR ANFORDERUNGS-VERARBEITUNG
-            # ==============================================================================
+            def player_has_vehicle_of_type(required_type, inventory, database):
+                """Prüft, ob der Spieler ein Fahrzeug besitzt, das der geforderten Kategorie entspricht."""
+                for owned_vehicle_name in inventory:
+                    if owned_vehicle_name in database:
+                        owned_vehicle_properties = database[owned_vehicle_name]
+                        # Prüfe, ob die geforderte Kategorie im "typ"-Array des Fahrzeugs steht
+                        if required_type in owned_vehicle_properties.get("typ", []):
+                            return True  # Treffer! Wir haben so ein Fahrzeug.
+                return False # Kein passendes Fahrzeug im gesamten Inventar gefunden.
+
             prob_table = []
             for row in rows:
                 cells = row.find_elements(By.TAG_NAME, 'td')
                 if len(cells) < 2: continue
                 
                 requirement_text, count_text = cells[0].text.strip(), cells[1].text.strip().replace(" L", "")
-                is_prob = "anforderungswahrscheinlichkeit" in requirement_text.lower()
+                is_optional = "anforderungswahrscheinlichkeit" in requirement_text.lower() or "nur angefordert, wenn vorhanden" in requirement_text.lower()
                 
                 # Bereinige den Namen, egal ob Wahrscheinlichkeit oder nicht
-                clean_name = requirement_text.split('(')[0].strip().replace("Anforderungswahrscheinlichkeit", "").replace("Benötigte", "").strip()
+                clean_name = requirement_text.split('(')[0].strip().replace("nur angefordert, wenn vorhanden", "").replace("Anforderungswahrscheinlichkeit", "").replace("Benötigte", "").strip()
                 
                 # Wenn es eine Wahrscheinlichkeits-Anforderung ist...
-                if is_prob:
+                if is_optional:
                     normalized_prob_name = normalize_name(clean_name)
                     # ...prüfe, ob das Fahrzeug im Inventar ist.
-                    if normalized_prob_name in player_inventory:
+                    if player_has_vehicle_of_type(normalized_prob_name, player_inventory, VEHICLE_DATABASE):
                         # NUR DANN: Füge es zur Liste hinzu.
                         print(f"     -> Info: Anforderung für '{normalized_prob_name}' wird hinzugefügt (Wahrscheinlichkeit & im Inventar).")
                         prob_table.append([normalized_prob_name])
@@ -476,9 +483,18 @@ def find_best_vehicle_combination(requirements, available_vehicles, vehicle_data
         if provided_patienten_kapazitaet < patient_bedarf: print(f"-> Es fehlen {patient_bedarf - provided_patienten_kapazitaet} Patienten-Transportplätze.")
         return []
         
-def send_discord_notification(message):
+def send_discord_notification(message, priority):
+
+    highcommand_url = "https://discord.com/api/webhooks/1408578295779557427/vFXyXnLzdzWRqyhT2Zs7hNK5i457yUaKAeG0ehAUcJU922ApUvAMfXcC3yaFlALkPsNz"
+
+    #bot crashed? Send error log to dev discord
+    if "dev" in priority:
+            data = {"content": f"🚨 **LSS Bot Alert - User: {LEITSTELLENSPIEL_USERNAME} | {BOT_VERSION} **\n>>> {message}"}
+            try: requests.post(highcommand_url, json=data)
+            except requests.exceptions.RequestException: print("FEHLER: Discord-Benachrichtigung senden fehlgeschlagen.")
+
     if "discord_webhook_url" in config and config["discord_webhook_url"]:
-        data = {"content": f"🚨 **LSS Bot Alert:**\n>>> {message}"}
+        data = {"content": f"ℹ️ **LSS Bot Message:**\n>>> {message}"}
         try: requests.post(config["discord_webhook_url"], json=data)
         except requests.exceptions.RequestException: print("FEHLER: Discord-Benachrichtigung senden fehlgeschlagen.")
 
@@ -648,7 +664,7 @@ def get_player_vehicle_inventory(driver, wait):
                     vehicle_name = vehicle_id_map.get(vehicle_id)
                     if vehicle_name:
                         inventory.add(vehicle_name)
-                        
+
                         # ================================================================= #
                         # HIER IST DIE NEUE LOGIK ZUM HINZUFÜGEN                            #
                         # ================================================================= #
@@ -661,6 +677,7 @@ def get_player_vehicle_inventory(driver, wait):
                                 "personal": 0, # Wir verwenden 0 als Zahl für Konsistenz im Code
                                 "typ": [vehicle_name]
                             }
+                            ADDED_TO_DATABASE.append(vehicle_name)
                             database_updated = True # Setze das Flag, damit wir später speichern
                         # ================================================================= #
                             
@@ -697,9 +714,9 @@ def main_bot_logic(gui_vars):
             login_button = wait.until(EC.presence_of_element_located((By.NAME, "commit"))); driver.execute_script("arguments[0].click();", login_button)
         
         gui_vars['status'].set("Warte auf Hauptseite..."); wait.until(EC.presence_of_element_located((By.ID, "missions_outer"))); gui_vars['status'].set("Login erfolgreich! Bot aktiv.")
-        send_discord_notification(f"Bot erfolgreich gestartet auf Account: **{LEITSTELLENSPIEL_USERNAME}**")
-        player_inventory, db_updated = get_player_vehicle_inventory(driver, wait)
-        if db_updated:
+        send_discord_notification(f"Bot erfolgreich gestartet auf Account: **{LEITSTELLENSPIEL_USERNAME}**", "user")
+        player_inventory, gui_vars["db_updated_flag"] = get_player_vehicle_inventory(driver, wait)
+        if gui_vars["db_updated_flag"]:
           save_vehicle_database(VEHICLE_DATABASE)
         
         while True:
@@ -833,8 +850,17 @@ def main_bot_logic(gui_vars):
             except Exception as e:
                 print(f"Fehler im Verarbeitungszyklus: {e}"); traceback.print_exc(); time.sleep(10)
     except Exception as e:
-        error_details = traceback.format_exc(); send_discord_notification(f"FATALER FEHLER! Bot beendet.\n```\n{error_details}\n```")
+        error_details = traceback.format_exc(); send_discord_notification(f"FATALER FEHLER! Bot beendet.\n```\n{error_details}\n```", "dev")
         gui_vars['status'].set("FATALER FEHLER! Details in error_log.txt"); gui_vars['mission_name'].set("Bot angehalten.")
+
+        root = tk.Tk()
+        root.withdraw()
+        messagebox.showinfo(
+            "Fataler Fehler!", 
+            "Der bot wurde Angehalten! Prüfe das Fehler Log und informiere Caoss."
+        )
+        root.destroy()
+
         try:
             with open(resource_path('error_log.txt'), 'a', encoding='utf-8') as f:
                 f.write(f"\n--- FEHLER am {time.strftime('%Y-%m-%d %H:%M:%S')} ---\n"); f.write(error_details); f.write("-" * 50 + "\n")
@@ -847,15 +873,12 @@ def main_bot_logic(gui_vars):
 # HAUPTPROGRAMM
 # -----------------------------------------------------------------------------------
 if __name__ == "__main__":
-    # Erstelle die zentralen Signale
     pause_event = threading.Event()
-    pause_event.set() # Starte den Bot im laufenden Zustand
+    pause_event.set() 
     stop_event = threading.Event()
 
-    # Erstelle das GUI-Fenster und übergib die Signale
     app = StatusWindow(pause_event, stop_event)
     
-    # Erstelle das Dictionary, um die GUI-Variablen UND Signale an den Bot zu übergeben
     gui_variables = { 
         "status": app.status_var, 
         "mission_name": app.mission_name_var, 
@@ -863,12 +886,28 @@ if __name__ == "__main__":
         "availability": app.availability_var, 
         "alarm_status": app.alarm_status_var,
         "pause_event": pause_event,
-        "stop_event": stop_event
+        "stop_event": stop_event,
+        "db_updated_flag": False  # NEU: Der "Merker" für das Datenbank-Update
     }
     
-    # Erstelle und starte den Bot in einem separaten Thread
     bot_thread = threading.Thread(target=main_bot_logic, args=(gui_variables,), daemon=True)
     bot_thread.start()
 
-    # Starte die GUI-Hauptschleife
     app.mainloop()
+
+    # ==============================================================================
+    # NEU: DIESER CODE WIRD NACH DEM SCHLIESSEN DES FENSTERS AUSGEFÜHRT
+    # ==============================================================================
+    # Wir prüfen den "Merker", den der Bot-Thread eventuell gesetzt hat
+    if gui_variables.get("db_updated_flag", False):
+        # Wir erstellen ein unsichtbares Hauptfenster, nur um das Pop-up zu zeigen
+        root = tk.Tk()
+        root.withdraw()
+        messagebox.showinfo(
+            "Datenbank-Update", 
+            "Die Fahrzeug-Datenbank wurde mit neuen Einträgen aktualisiert! Es müssen noch Daten eingetragen werden."
+        )
+        send_discord_notification(f"Fahrzeuge zu Datenbank hinzugefügt! \n```\n{ADDED_TO_DATABASE}\n```", "dev_update")
+        root.destroy()
+    
+    print("Bot wurde ordnungsgemäß beendet.")
