@@ -1,6 +1,7 @@
 import subprocess
 import sys
 import os
+import shutil
 
 print("--- LSS Bot Launcher ---")
 print("1. Synchronisiere mit der neuesten Version von GitHub...")
