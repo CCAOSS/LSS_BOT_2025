@@ -43,7 +43,7 @@
     "GW-L2": { "fraktion": "FW", "kennung": "58/", "personal": 3, "typ": ["GW-L2"] },
     "GW-L2-Wasser": { "fraktion": "FW", "kennung": "56/", "personal": 2, "typ": ["Schlauchwagen"] },
     "SW-KatS": { "fraktion": "FW", "kennung": "58/", "personal": 3, "typ": ["Schlauchwagen"]},
-    "SW-2000-Tr": { "fraktion": "FW", "kennung": "58/", "personal": 3, "typ": ["Schlauchwagen"]},
+    "SW 2000-Tr": { "fraktion": "FW", "kennung": "58/", "personal": 3, "typ": ["Schlauchwagen"]},
 
     "RW": { "fraktion": "FW", "kennung": "61/", "personal": 3, "typ": ["Rüstwagen"] },
 
