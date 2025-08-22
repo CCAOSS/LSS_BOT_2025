@@ -188,8 +188,8 @@ def setup_driver():
     
 def get_mission_requirements(driver, wait, player_inventory, given_patients):
     """
-    **FINAL VERSION:** A complete rewrite to definitively fix the inventory
-    and probability check logic using a clear, multi-pass approach.
+    **FINAL VERSION (KORRIGIERT):** Behebt den Logikfehler bei der Verarbeitung
+    von Anforderungswahrscheinlichkeiten.
     """
     
     # --- ANPASSBARE ÜBERSETZUNGS-LISTE ---
@@ -210,98 +210,85 @@ def get_mission_requirements(driver, wait, player_inventory, given_patients):
             vehicle_table = wait.until(EC.visibility_of_element_located((By.XPATH, "//table[.//th[contains(text(), 'Fahrzeuge')]]")))
             rows = vehicle_table.find_elements(By.XPATH, ".//tbody/tr")
 
-            # Hilfsfunktion für konsistente Namens-Bereinigung
             def normalize_name(name):
                 clean = name.split('(')[0].strip().replace("Benötigte ", "")
                 return translation_map.get(clean, clean)
 
-            # --- PHASE 1: Alle Rohdaten aus der Tabelle sammeln ---
-            collected_data = []
+            # ==============================================================================
+            # NEUE, VEREINFACHTE LOGIK ZUR ANFORDERUNGS-VERARBEITUNG
+            # ==============================================================================
             for row in rows:
                 cells = row.find_elements(By.TAG_NAME, 'td')
                 if len(cells) < 2: continue
+                
                 requirement_text, count_text = cells[0].text.strip(), cells[1].text.strip().replace(" L", "")
                 is_prob = "anforderungswahrscheinlichkeit" in requirement_text.lower()
-                collected_data.append({'text': requirement_text, 'count': count_text, 'is_prob': is_prob})
+                
+                # Bereinige den Namen, egal ob Wahrscheinlichkeit oder nicht
+                clean_name = requirement_text.split('(')[0].strip().replace("Anforderungswahrscheinlichkeit", "").replace("Benötigte", "").strip()
+                
+                # Wenn es eine Wahrscheinlichkeits-Anforderung ist...
+                if is_prob:
+                    normalized_prob_name = normalize_name(clean_name)
+                    # ...prüfe, ob das Fahrzeug im Inventar ist.
+                    if normalized_prob_name in player_inventory:
+                        # NUR DANN: Füge es zur Liste hinzu.
+                        print(f"     -> Info: Anforderung für '{normalized_prob_name}' wird hinzugefügt (Wahrscheinlichkeit & im Inventar).")
+                        if count_text.isdigit():
+                            for _ in range(int(count_text)):
+                                raw_requirements['fahrzeuge'].append([normalized_prob_name])
+                    else:
+                        # Sonst: Ignoriere es.
+                        print(f"     -> Info: Anforderung für '{normalized_prob_name}' wird ignoriert (Wahrscheinlichkeit & nicht im Inventar).")
+                    continue # Springe zur nächsten Zeile
+                
+                # Dies ist der Code für alle normalen (festen) Anforderungen
+                req_lower_clean = clean_name.lower()
+                if any(keyword in req_lower_clean for keyword in ["schlauchwagen", "personal", "feuerwehrleute", "wasser", "schaummittel", "feuerlöschpumpe"]):
+                    if "personal" in req_lower_clean or "feuerwehrleute" in req_lower_clean:
+                        if count_text.isdigit(): raw_requirements['personal'] += int(count_text)
+                    elif "schlauchwagen" in req_lower_clean:
+                        print("DEBUG: Schlauchwagen")
+                        if count_text.isdigit():
+                            for _ in range(int(count_text)): raw_requirements['fahrzeuge'].append(["Schlauchwagen"])
+                    elif "wasser" in req_lower_clean:
+                        if count_text.isdigit(): raw_requirements['wasser'] += int(count_text)
+                    elif "schaummittel" in req_lower_clean:
+                        if count_text.isdigit(): raw_requirements['schaummittel'] += int(count_text)
+                    elif "feuerlöschpumpe" in req_lower_clean:
+                        if count_text.isdigit():
+                            for _ in range(int(count_text)):
+                                raw_requirements['fahrzeuge'].append(["Löschfahrzeug", "Tanklöschfahrzeug"])
+                    continue
 
-            # --- PHASE 2: Feste Anforderungen zuerst verarbeiten ---
-            prob_vehicles_to_check = set()
-            for item in collected_data:
-                # Store all probability vehicles for a final check
-                if item['is_prob']:
-                    # **KORREKTUR HIER:** Der Name wird jetzt richtig extrahiert
-                    prob_name = item['text'].split('(')[0].strip().replace("Anforderungswahrscheinlichkeit", "")
-                    normalized_prob_name = normalize_name(prob_name)
-                    prob_vehicles_to_check.add(normalized_prob_name)
+                options_text = [p.strip() for p in clean_name.replace(",", " oder ").split(" oder ")]
+                final_options = [normalize_name(opt) for opt in options_text if opt]
+                if count_text.isdigit() and final_options:
+                    for _ in range(int(count_text)):
+                        raw_requirements['fahrzeuge'].append(final_options)
 
-                # Process hard requirements immediately
-                else:
-                    clean_name = item['text'].split('(')[0].strip().replace("Benötigte ", "")
-                    req_lower_clean = clean_name.lower()
-                    
-                    if any(keyword in req_lower_clean for keyword in ["schlauchwagen", "personal", "feuerwehrleute", "wasser", "schaummittel", "feuerlöschpumpe"]):
-                        if "personal" in req_lower_clean or "feuerwehrleute" in req_lower_clean:
-                            if item['count'].isdigit(): raw_requirements['personal'] += int(item['count'])
-                        elif "schlauchwagen" in req_lower_clean:
-                            if item['count'].isdigit():
-                                for _ in range(int(item['count'])): raw_requirements['fahrzeuge'].append(["Schlauchwagen"])
-                        elif "wasser" in req_lower_clean:
-                            if item['count'].isdigit(): raw_requirements['wasser'] += int(item['count'])
-                        elif "schaummittel" in req_lower_clean:
-                            if item['count'].isdigit(): raw_requirements['schaummittel'] += int(item['count'])
-                        elif "feuerlöschpumpe" in req_lower_clean:
-                            if item['count'].isdigit():
-                                for _ in range(int(item['count'])):
-                                    raw_requirements['fahrzeuge'].append(["Löschfahrzeug", "Tanklöschfahrzeug"])
-                        continue
-
-                    options_text = [p.strip() for p in clean_name.replace(",", " oder ").split(" oder ")]
-                    final_options = [normalize_name(opt) for opt in options_text if opt]
-                    if item['count'].isdigit() and final_options:
-                        for _ in range(int(item['count'])):
-                            raw_requirements['fahrzeuge'].append(final_options)
-            
-            # --- PHASE 3: Final check and cleanup ---
-            for vehicle_name in prob_vehicles_to_check:
-                if vehicle_name not in player_inventory:
-                    print(f"     -> Info: Requirement for '{vehicle_name}' ignored (Probability & Not in Inventory).")
-                    
-                    # --- DEBUG PRINTS ---
-                    #print(f"     DEBUG: Searching to remove '{vehicle_name}'.")
-                    #print(f"     DEBUG: Current requirement list: {raw_requirements['fahrzeuge']}")
-                    
-                    # Remove all instances of this vehicle from the requirements
-                    original_count = len(raw_requirements['fahrzeuge'])
-                    cleaned_fahrzeuge = [req_list for req_list in raw_requirements['fahrzeuge'] if vehicle_name not in req_list]
-                    
-                    if original_count != len(cleaned_fahrzeuge):
-                        #print(f"     -> Correction: '{vehicle_name}' is being removed from the requirement list.")
-                        raw_requirements['fahrzeuge'] = cleaned_fahrzeuge
-
-        except TimeoutException: print("Info: No vehicle requirement table found.")
+        except TimeoutException: 
+            print("Info: No vehicle requirement table found.")
         
-        try: # Get credits
+        # Der Rest der Funktion (Credits, Patienten, etc.) bleibt unverändert
+        try:
             credits_selector = "//td[normalize-space()='Credits im Durchschnitt']/following-sibling::td"
             credits_text = driver.find_element(By.XPATH, credits_selector).text.strip().replace(".", "").replace(",", "")
             if credits_text.isdigit(): raw_requirements['credits'] = int(credits_text)
         except NoSuchElementException: pass
         
-        # --- NEUER ABSCHNITT: PATIENTENANZAHL BESTIMMEN ---
         min_patients = 0
         calculated_patients = 0
         try:
-            # 1. Lese die Mindestanzahl aus der HTML-Tabelle
             min_patients_selector = "//td[normalize-space()='Mindest Patientenanzahl']/following-sibling::td"
             min_patients_text = driver.find_element(By.XPATH, min_patients_selector).text.strip()
             if min_patients_text.isdigit():
                 min_patients = int(min_patients_text)
         except NoSuchElementException:
-            # Wenn das Feld nicht existiert, bleibt min_patients bei 0
             pass
 
-        # 2. Wende deine definierte Logik an
         if given_patients == 0 and min_patients > 0:
-            calculated_patients = min_patients # War vorher 1, aber min_patients ist flexibler
+            calculated_patients = min_patients
             print("Patienten treten am ende auf! - calculated patients:", calculated_patients)
         elif given_patients == 0 and min_patients == 0:
             print("Keine Patienten vorhanden!")
@@ -310,12 +297,14 @@ def get_mission_requirements(driver, wait, player_inventory, given_patients):
             print("Patienten bereits vorhanden! - calculated patients:", calculated_patients)
         
         raw_requirements['patienten'] = calculated_patients
-        # --- ENDE NEUER ABSCHNITT ---
 
-    except TimeoutException: return None
+    except TimeoutException: 
+        return None
     finally:
-        try: wait.until(EC.element_to_be_clickable((By.XPATH, "//a[text()='Zurück']"))).click()
-        except: driver.refresh()
+        try: 
+            wait.until(EC.element_to_be_clickable((By.XPATH, "//a[text()='Zurück']"))).click()
+        except: 
+            driver.refresh()
     return raw_requirements
 
 def get_available_vehicles(driver, wait):
@@ -363,10 +352,11 @@ def get_available_vehicles(driver, wait):
 
 def find_best_vehicle_combination(requirements, available_vehicles, vehicle_data):
     """
-    **NEUE LOGIK V3:** Findet die beste Fahrzeugkombination mit einer verbesserten,
-    "gierigen" Auswahl-Logik, die Fahrzeuge mit mehreren Rollen korrekt behandelt.
+    **NEUE LOGIK V4:** Korrigiert die Fahrzeugauswahl, um "Oder"-Bedingungen
+    (z.B. "FuStw oder Polizeimotorrad") korrekt als EINEN zu füllenden Slot zu behandeln,
+    anstatt fälschlicherweise beide Fahrzeuge anzufordern.
     """
-    # Vorbereitung der Anforderungen (unverändert)
+    # 1. Vorbereitung der Anforderungen (unverändert)
     needed_vehicle_options_list = requirements.get('fahrzeuge', [])
     needed_personal = requirements.get('personal', 0)
     needed_wasser = requirements.get('wasser', 0)
@@ -375,7 +365,7 @@ def find_best_vehicle_combination(requirements, available_vehicles, vehicle_data
 
     if patient_bedarf > 5:
         needed_vehicle_options_list.append(["KdoW-LNA"])
-    elif patient_bedarf > 10:
+    if patient_bedarf > 10: # Korrigiert von elif zu if
         needed_vehicle_options_list.append(["GW-San"])
         needed_vehicle_options_list.append(["ELW 1 (SEG)"])
         needed_vehicle_options_list.append(["KdoW-OrgL"])
@@ -387,53 +377,52 @@ def find_best_vehicle_combination(requirements, available_vehicles, vehicle_data
     for _ in range(final_rtw_bedarf):
         needed_vehicle_options_list.append(["RTW"])
 
-    # --- START DER NEUEN AUSWAHL-LOGIK ---
+    # ==============================================================================
+    # START DER KORRIGIERTEN AUSWAHL-LOGIK FÜR FAHRZEUG-SLOTS
+    # ==============================================================================
     vehicles_to_send = []
     pool = list(available_vehicles)
-    
-    # Wandle die Anforderungsliste in eine zählbare Form um
-    needed_counts = Counter(opt for sublist in needed_vehicle_options_list for opt in sublist)
-    
-    # Die Schleife läuft, solange es ungedeckte Anforderungen und verfügbare Fahrzeuge gibt
-    while True:
-        # 1. Zähle die aktuell durch `vehicles_to_send` abgedeckten Rollen
-        current_provided_roles = [role for v in vehicles_to_send for role in v['properties'].get('typ', [])]
-        current_counts = Counter(current_provided_roles)
+    unfulfilled_slots = list(needed_vehicle_options_list)  # Eine Kopie der Anforderungen, die wir bearbeiten
 
-        # 2. Finde die beste nächste Wahl aus dem Pool
+    while unfulfilled_slots and pool:
         best_vehicle_to_add = None
-        highest_score = 0
+        best_vehicle_score = 0  # Der "Score" misst, wie nützlich ein Fahrzeug ist
 
+        # Schritt A: Finde das nützlichste Fahrzeug im Pool
         for vehicle in pool:
-            score = 0
-            vehicle_roles = vehicle['properties'].get('typ', [])
-            # Bewerte das Fahrzeug danach, wie viele *noch benötigte* Rollen es erfüllt
-            temp_counts = current_counts.copy()
-            for role in vehicle_roles:
-                if temp_counts.get(role, 0) < needed_counts.get(role, 0):
-                    score += 1
-                    temp_counts[role] = temp_counts.get(role, 0) + 1
+            vehicle_roles = set(vehicle['properties'].get('typ', []))
+            # Zähle, wie viele der *noch offenen* Slots dieses Fahrzeug füllen könnte
+            current_score = sum(1 for slot in unfulfilled_slots if not vehicle_roles.isdisjoint(slot))
             
-            if score > highest_score:
-                highest_score = score
+            if current_score > best_vehicle_score:
+                best_vehicle_score = current_score
                 best_vehicle_to_add = vehicle
+        
+        # Wenn kein Fahrzeug gefunden wurde, das einen offenen Slot füllen kann, brechen wir ab.
+        if best_vehicle_to_add is None:
+            break
 
-        # 3. Wenn ein nützliches Fahrzeug gefunden wurde, füge es hinzu. Sonst beende die Suche.
-        if best_vehicle_to_add:
-            vehicles_to_send.append(best_vehicle_to_add)
-            pool.remove(best_vehicle_to_add)
-        else:
-            break  # Kein Fahrzeug im Pool kann eine offene Anforderung mehr erfüllen
-            
-    # --- ENDE DER NEUEN AUSWAHL-LOGIK ---
+        # Schritt B: Füge das beste Fahrzeug hinzu und entferne den Slot, den es füllt
+        vehicles_to_send.append(best_vehicle_to_add)
+        pool.remove(best_vehicle_to_add)
 
-    # 2. Berechne, was die ausgewählten Fahrzeuge mitbringen (unverändert)
+        # Finde den ERSTEN passenden Slot, den dieses Fahrzeug füllt, und entferne ihn.
+        roles_of_added_vehicle = set(best_vehicle_to_add['properties'].get('typ', []))
+        for i, slot in enumerate(unfulfilled_slots):
+            if not roles_of_added_vehicle.isdisjoint(slot):
+                unfulfilled_slots.pop(i)
+                break  # Wichtig: Pro Fahrzeug wird nur EIN Slot gefüllt!
+
+    # ==============================================================================
+    # ENDE DER KORRIGIERTEN AUSWAHL-LOGIK
+    # ==============================================================================
+
+    # 3. Defizit-Auffüllung für Ressourcen (Wasser, Personal etc.) - bleibt unverändert
     provided_personal = sum(v['properties'].get('personal', 0) for v in vehicles_to_send)
     provided_wasser = sum(v['properties'].get('wasser', 0) for v in vehicles_to_send)
     provided_schaummittel = sum(v['properties'].get('schaummittel', 0) for v in vehicles_to_send)
     provided_patienten_kapazitaet = sum(v['properties'].get('patienten_kapazitaet', 0) for v in vehicles_to_send)
 
-    # 3. Defizit-Auffüllung für Ressourcen (Wasser, Personal etc.) - füllt ggf. weiter auf
     def fill_deficit(resource_key, current_provided, needed, resource_name):
         nonlocal pool, vehicles_to_send, provided_personal, provided_wasser, provided_schaummittel, provided_patienten_kapazitaet
         if current_provided < needed:
@@ -456,17 +445,8 @@ def find_best_vehicle_combination(requirements, available_vehicles, vehicle_data
     provided_personal = fill_deficit('personal', provided_personal, needed_personal, 'Personal')
     provided_patienten_kapazitaet = fill_deficit('patienten_kapazitaet', provided_patienten_kapazitaet, patient_bedarf, 'Patienten-Transportplätze')
 
-    # 4. Finale Prüfung (unverändert, dient als finales Sicherheitsnetz)
-    final_vehicle_roles = [role for v in vehicles_to_send for role in v['properties'].get('typ', [])]
-    final_counts = Counter(final_vehicle_roles)
-    
-    all_vehicles_met = True
-    temp_needed_counts = Counter(opt for sublist in needed_vehicle_options_list for opt in sublist)
-    
-    for role, required_num in temp_needed_counts.items():
-        if final_counts.get(role, 0) < required_num:
-            all_vehicles_met = False
-            break
+    # 4. Finale Prüfung (jetzt basierend auf den ungedeckten Slots)
+    all_vehicles_met = not unfulfilled_slots
 
     if all_vehicles_met and provided_personal >= needed_personal and provided_wasser >= needed_wasser and provided_schaummittel >= needed_schaummittel and provided_patienten_kapazitaet >= patient_bedarf:
         print(f"Erfolgreiche Zuteilung gefunden! Sende {len(vehicles_to_send)} Fahrzeuge.")
@@ -476,10 +456,11 @@ def find_best_vehicle_combination(requirements, available_vehicles, vehicle_data
         # Detaillierte Fehlerausgabe...
         if not all_vehicles_met:
             print("-> Es fehlen benötigte Fahrzeugtypen:")
-            for role, required_num in temp_needed_counts.items():
-                sent_num = final_counts.get(role, 0)
-                if sent_num < required_num:
-                    print(f"     - {required_num - sent_num}x {role}")
+            # Zähle die verbleibenden Slots für eine saubere Ausgabe
+            from collections import Counter
+            remaining_slots_summary = Counter(tuple(sorted(slot)) for slot in unfulfilled_slots)
+            for slot_tuple, count in remaining_slots_summary.items():
+                print(f"     - {count}x {' oder '.join(slot_tuple)}")
         
         if provided_personal < needed_personal: print(f"-> Es fehlen {needed_personal - provided_personal} Personal.")
         if provided_wasser < needed_wasser: print(f"-> Es fehlen {needed_wasser - provided_wasser} L Wasser.")
