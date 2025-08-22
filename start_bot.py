@@ -62,10 +62,16 @@ def update_repo():
     """Synchronisiert das Skript mit der neuesten Version von GitHub."""
     print("\n3. Synchronisiere mit der neuesten Version von GitHub...")
     try:
-        print("   -> Setze lokale Dateien zurück (git reset --hard)...")
+        print("   -> Setze lokale Änderungen zurück (git reset --hard)...")
         subprocess.run(["git", "reset", "--hard", "HEAD"], check=True, capture_output=True, text=True)
+        
+        # NEU: Entferne alle unbekannten Dateien, die im Weg sein könnten (wie die lokale requirements.txt)
+        print("   -> Bereinige unbekannte Dateien (git clean -fd)...")
+        subprocess.run(["git", "clean", "-fd"], check=True, capture_output=True, text=True)
+
         print("   -> Lade neueste Version herunter (git pull)...")
         subprocess.run(["git", "pull"], check=True)
+        
         print("-> Synchronisierung abgeschlossen.")
     except subprocess.CalledProcessError as e:
         print(f"-> FEHLER bei der Synchronisierung mit GitHub: {e.stderr}")
