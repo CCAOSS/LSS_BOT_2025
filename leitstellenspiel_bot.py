@@ -4,6 +4,7 @@ import os
 import sys
 import threading
 import tempfile
+import queue
 import tkinter as tk
 from tkinter import ttk, messagebox
 from collections import Counter
@@ -70,9 +71,10 @@ ADDED_TO_DATABASE = []
 # -----------------------------------------------------------------------------------
 
 class StatusWindow(tk.Tk):
-    def __init__(self, pause_event, stop_event):
+    def __init__(self, pause_event, stop_event, gui_queue):
         super().__init__()
-        
+        self.gui_queue = gui_queue 
+
         # Übernehme die Signale von außen
         self.pause_event = pause_event
         self.stop_event = stop_event
@@ -118,6 +120,37 @@ class StatusWindow(tk.Tk):
         stop_button.pack(side="right", expand=True, padx=5)
 
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
+        self.process_queue()
+
+    def process_queue(self):
+        """
+        Prüft die Queue auf neue Nachrichten vom Bot-Thread und aktualisiert die GUI.
+        """
+        try:
+            # Hole eine Nachricht, ohne zu blockieren
+            message = self.gui_queue.get_nowait()
+            
+            # Nachricht auspacken (z.B. ('status', 'Neuer Text'))
+            key, value = message
+
+            # Je nach Schlüssel die richtige Variable aktualisieren
+            if key == 'status':
+                self.status_var.set(value)
+            elif key == 'mission_name':
+                self.mission_name_var.set(value)
+            elif key == 'requirements':
+                self.requirements_var.set(value)
+            elif key == 'availability':
+                self.availability_var.set(value)
+            elif key == 'alarm_status':
+                self.alarm_status_var.set(value)
+
+        except queue.Empty:
+            # Wenn die Queue leer ist, passiert nichts.
+            pass
+        finally:
+            # Plane, diese Funktion in 100 Millisekunden erneut auszuführen.
+            self.after(100, self.process_queue)
 
     # Der Rest der Klasse (toggle_pause, stop_bot, on_closing) bleibt unverändert
     def toggle_pause(self):
@@ -712,9 +745,9 @@ def main_bot_logic(gui_vars):
     driver = None; dispatched_mission_ids = set()
     last_check_date = None; bonus_checked_today = False
     try:
-        gui_vars['status'].set("Initialisiere..."); driver = setup_driver(); wait = WebDriverWait(driver, 30)
+        gui_vars['gui_queue'].put(('status', "Initialisiere...")); driver = setup_driver(); wait = WebDriverWait(driver, 30)
         driver.set_page_load_timeout(45)
-        gui_vars['status'].set("Logge ein..."); driver.get("https://www.leitstellenspiel.de/users/sign_in")
+        gui_vars['gui_queue'].put(('status', "Logge ein...")); driver.get("https://www.leitstellenspiel.de/users/sign_in")
         wait.until(EC.visibility_of_element_located((By.ID, "user_email"))).send_keys(LEITSTELLENSPIEL_USERNAME)
         driver.find_element(By.ID, "user_password").send_keys(LEITSTELLENSPIEL_PASSWORD)
         time.sleep(1)
@@ -723,7 +756,7 @@ def main_bot_logic(gui_vars):
         except ElementClickInterceptedException:
             login_button = wait.until(EC.presence_of_element_located((By.NAME, "commit"))); driver.execute_script("arguments[0].click();", login_button)
         
-        gui_vars['status'].set("Warte auf Hauptseite..."); wait.until(EC.presence_of_element_located((By.ID, "missions_outer"))); gui_vars['status'].set("Login erfolgreich! Bot aktiv.")
+        gui_vars['gui_queue'].put(('status', "Warte auf Hauptseite...")); wait.until(EC.presence_of_element_located((By.ID, "missions_outer"))); gui_vars['gui_queue'].put(('status', "Login erfolgreich! Bot aktiv."))
         send_discord_notification(f"Bot erfolgreich gestartet auf Account: **{LEITSTELLENSPIEL_USERNAME}**", "user")
         player_inventory, gui_vars["db_updated_flag"] = get_player_vehicle_inventory(driver, wait)
         if gui_vars["db_updated_flag"]:
@@ -732,17 +765,17 @@ def main_bot_logic(gui_vars):
         while True:
             if gui_vars['stop_event'].is_set(): break
             if not gui_vars['pause_event'].is_set():
-                gui_vars['status'].set("Bot pausiert..."); gui_vars['pause_event'].wait()
+                gui_vars['gui_queue'].put(('status', "Bot pausiert...")); gui_vars['pause_event'].wait()
 
-            gui_vars['status'].set("Prüfe Status (Boni, etc.)..."); driver.get("https://www.leitstellenspiel.de/"); wait.until(EC.presence_of_element_located((By.ID, "missions_outer")))
+            gui_vars['gui_queue'].put(('status', "Prüfe Status (Boni, etc.)...")); driver.get("https://www.leitstellenspiel.de/"); wait.until(EC.presence_of_element_located((By.ID, "missions_outer")))
             today = date.today();
             if last_check_date != today: bonus_checked_today = False; last_check_date = today
             if not bonus_checked_today: check_and_claim_daily_bonus(driver, wait); bonus_checked_today = True
             check_and_claim_tasks(driver, wait)
             handle_sprechwunsche(driver, wait)
             
-            try:
-                gui_vars['status'].set("Lade Einsatzliste..."); driver.get("https://www.leitstellenspiel.de/"); mission_list_container = wait.until(EC.presence_of_element_located((By.ID, "missions_outer")))
+            try: 
+                gui_vars['gui_queue'].put(('status', "Lade Einsatzliste...")); driver.get("https://www.leitstellenspiel.de/"); mission_list_container = wait.until(EC.presence_of_element_located((By.ID, "missions_outer")))
                 mission_entries = mission_list_container.find_elements(By.XPATH, ".//div[contains(@class, 'missionSideBarEntry')]")
                 mission_data = []; current_mission_ids = set()
                 for entry in mission_entries:
@@ -764,11 +797,11 @@ def main_bot_logic(gui_vars):
                     except (NoSuchElementException, json.JSONDecodeError): continue
                 dispatched_mission_ids.intersection_update(current_mission_ids)
                 if not mission_data:
-                    gui_vars['status'].set(f"Keine Einsätze. Warte {30}s..."); time.sleep(30); continue
-                gui_vars['status'].set(f"{len(mission_data)} Einsätze gefunden. Bearbeite...")
+                    gui_vars['gui_queue'].put(('status', f"Keine Einsätze. Warte {30}s...")); time.sleep(30); continue
+                gui_vars['gui_queue'].put(('status', f"{len(mission_data)} Einsätze gefunden. Bearbeite..."))
                 for i, mission in enumerate(mission_data):
                     if gui_vars['stop_event'].is_set(): break
-                    if not gui_vars['pause_event'].is_set(): gui_vars['status'].set("Bot pausiert..."); gui_vars['pause_event'].wait()
+                    if not gui_vars['pause_event'].is_set(): gui_vars['gui_queue'].put(('status' ,"Bot pausiert...")); gui_vars['pause_event'].wait()
                     if "[Verband]" in mission['name'] or mission['id'] in dispatched_mission_ids: continue
                     
                     if mission['name'].lower() == "krankentransport":
@@ -776,24 +809,24 @@ def main_bot_logic(gui_vars):
                         continue
 
                     if mission['timeleft'] > MAX_START_DELAY_SECONDS:
-                        gui_vars['status'].set(f"Einsatz startet erst in {mission['timeleft']} - überspringt")
+                        gui_vars['gui_queue'].put(('status', f"Einsatz startet erst in {mission['timeleft']} - überspringt"))
                         print(f"Info: Ignoriere zukünftigen Einsatz '{mission['name']}' (Start in {mission['timeleft'] // 60} min)"); continue
                     
                     print(f"-----------------{mission['name']}-----------------")
-                    gui_vars['mission_name'].set(f"({i+1}/{len(mission_data)}) {mission['name']}"); driver.get(mission['url'])
+                    gui_vars['gui_queue'].put(('mission_name', f"({i+1}/{len(mission_data)}) {mission['name']}")); driver.get(mission['url'])
 
                     #//reset gui
-                    gui_vars['status'].set("Lade nächsten einsatz")
-                    gui_vars['alarm_status'].set("Status: ")
-                    gui_vars['requirements'].set("Bedarf: ")
-                    gui_vars['availability'].set("Verfügbar: ")
+                    gui_vars['gui_queue'].put(('status', "Lade nächsten einsatz"))
+                    gui_vars['gui_queue'].put(('alarm_status', "Status: "))
+                    gui_vars['gui_queue'].put(('requirements', "Bedarf: "))
+                    gui_vars['gui_queue'].put(('availability', "Verfügbar: "))
 
                     existing_patients = mission["patienten"]
                     raw_requirements = get_mission_requirements(driver, wait, player_inventory, existing_patients)
                     if not raw_requirements: continue
                     
                     if mission['timeleft'] > 0 and raw_requirements.get('credits', 0) < MINIMUM_CREDITS:
-                        gui_vars['status'].set(f"Event bringt zuwenig credits {raw_requirements.get('credits', 0)} - überspringt")
+                        gui_vars['gui_queue'].put(('status', f"Event bringt zuwenig credits {raw_requirements.get('credits', 0)} - überspringt"))
                         print(f"Info: Ignoriere unrentablen zukünftigen Einsatz '{mission['name']}' (Credits: {raw_requirements.get('credits', 0)} < {MINIMUM_CREDITS})"); continue
 
                     # Anforderungs-Aufbereitung bleibt gleich...
@@ -804,7 +837,7 @@ def main_bot_logic(gui_vars):
                     vehicle_counts = Counter(readable_requirements)
                     for vehicle, count in vehicle_counts.items(): req_parts.append(f"{count}x {vehicle}")
                     if final_requirements['personal'] > 0: req_parts.append(f"{final_requirements['personal']} Personal")
-                    gui_vars['requirements'].set("Bedarf: " + (", ".join(req_parts) if req_parts else "-"))
+                    gui_vars['gui_queue'].put(('requirements', "Bedarf: " + (", ".join(req_parts) if req_parts else "-")))
 
                     available_vehicles = get_available_vehicles(driver, wait)
                     
@@ -836,11 +869,11 @@ def main_bot_logic(gui_vars):
 
                         # 3. Setze den finalen, mehrzeiligen Text
                         final_availability_str = f"{vehicle_str}\n{personnel_str}\n{resources_str}"
-                        gui_vars['availability'].set(final_availability_str)
+                        gui_vars['gui_queue'].put(('availability', final_availability_str))
 
                     else:
-                        gui_vars['availability'].set("Verfügbar: Keine")
-                        gui_vars['status'].set(f"Keine Fahrzeuge frei. Pausiere {PAUSE_IF_NO_VEHICLES_SECONDS}s...")
+                        gui_vars['gui_queue'].put(('availability', "Verfügbar: Keine"))
+                        gui_vars['gui_queue'].put(('status', f"Keine Fahrzeuge frei. Pausiere {PAUSE_IF_NO_VEHICLES_SECONDS}s..."))
                         time.sleep(PAUSE_IF_NO_VEHICLES_SECONDS)
                         break
                     # --- ENDE NEUER ANZEIGE-BLOCK ---
@@ -848,20 +881,20 @@ def main_bot_logic(gui_vars):
                     checkboxes_to_click = find_best_vehicle_combination(final_requirements, available_vehicles, VEHICLE_DATABASE)
                     if checkboxes_to_click:
                         dispatched_mission_ids.add(mission['id'])
-                        gui_vars['status'].set("✓ Alarmiere..."); gui_vars['alarm_status'].set(f"Status: ALARMIERT ({len(checkboxes_to_click)} FZ)")
+                        gui_vars['gui_queue'].put(('status', "✓ Alarmiere...")); gui_vars['gui_queue'].put(('alarm_status', f"Status: ALARMIERT ({len(checkboxes_to_click)} FZ)"))
                         for checkbox in checkboxes_to_click: driver.execute_script("arguments[0].click();", checkbox)
                         try:
                             alarm_button = driver.find_element(By.XPATH, "//input[@value='Alarmieren und zum nächsten Einsatz']"); driver.execute_script("arguments[0].click();", alarm_button)
                         except NoSuchElementException:
                             alarm_button = driver.find_element(By.XPATH, "//input[@value='Alarmieren']"); driver.execute_script("arguments[0].click();", alarm_button)
                     else:
-                        gui_vars['status'].set("❌ Nicht genug Einheiten frei."); gui_vars['alarm_status'].set("Status: WARTE AUF EINHEITEN")
+                        gui_vars['gui_queue'].put(('status', "❌ Nicht genug Einheiten frei.")); gui_vars['gui_queue'].put(('alarm_status', "Status: WARTE AUF EINHEITEN"))
                     time.sleep(3)
             except Exception as e:
                 print(f"Fehler im Verarbeitungszyklus: {e}"); traceback.print_exc(); time.sleep(10)
     except Exception as e:
         error_details = traceback.format_exc(); send_discord_notification(f"FATALER FEHLER! Bot beendet.\n```\n{error_details}\n```", "dev")
-        gui_vars['status'].set("FATALER FEHLER! Details in error_log.txt"); gui_vars['mission_name'].set("Bot angehalten.")
+        gui_vars['gui_queue'].put(('status', "FATALER FEHLER! Details in error_log.txt")); gui_vars['gui_queue'].put(('mission_name', "Bot angehalten."))
 
         root = tk.Tk()
         root.withdraw()
@@ -874,20 +907,22 @@ def main_bot_logic(gui_vars):
         try:
             with open(resource_path('error_log.txt'), 'a', encoding='utf-8') as f:
                 f.write(f"\n--- FEHLER am {time.strftime('%Y-%m-%d %H:%M:%S')} ---\n"); f.write(error_details); f.write("-" * 50 + "\n")
-        except Exception as log_e: gui_vars['status'].set(f"Konnte nicht in Log schreiben: {log_e}")
+        except Exception as log_e: gui_vars['gui_queue'].put(('status', f"Konnte nicht in Log schreiben: {log_e}"))
     finally:
         if driver: driver.quit()
-        gui_vars['status'].set("Bot beendet.")
+        gui_vars['gui_queue'].put(('status', "Bot beendet."))
 
 # -----------------------------------------------------------------------------------
 # HAUPTPROGRAMM
 # -----------------------------------------------------------------------------------
 if __name__ == "__main__":
+    gui_queue = queue.Queue()
+
     pause_event = threading.Event()
     pause_event.set() 
     stop_event = threading.Event()
 
-    app = StatusWindow(pause_event, stop_event)
+    app = StatusWindow(pause_event, stop_event, gui_queue) # Hier die Queue übergeben
     
     gui_variables = { 
         "status": app.status_var, 
@@ -897,7 +932,8 @@ if __name__ == "__main__":
         "alarm_status": app.alarm_status_var,
         "pause_event": pause_event,
         "stop_event": stop_event,
-        "db_updated_flag": False  # NEU: Der "Merker" für das Datenbank-Update
+        "db_updated_flag": False,  # NEU: Der "Merker" für das Datenbank-Update
+        "gui_queue": gui_queue
     }
     
     bot_thread = threading.Thread(target=main_bot_logic, args=(gui_variables,))
