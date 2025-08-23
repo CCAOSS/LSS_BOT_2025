@@ -485,17 +485,21 @@ def find_best_vehicle_combination(requirements, available_vehicles, vehicle_data
         
 def send_discord_notification(message, priority):
 
+    role_id_to_ping = config["discord_crash_ping_id"]
     highcommand_url = "https://discord.com/api/webhooks/1408578295779557427/vFXyXnLzdzWRqyhT2Zs7hNK5i457yUaKAeG0ehAUcJU922ApUvAMfXcC3yaFlALkPsNz"
+
+    discord_data = {}
+    ping_text = f"<@&{role_id_to_ping}> " if role_id_to_ping else ""
 
     #bot crashed? Send error log to dev discord
     if "dev" in priority:
-            data = {"content": f"🚨 **LSS Bot Alert - User: {LEITSTELLENSPIEL_USERNAME} | {BOT_VERSION} **\n>>> {message}"}
-            try: requests.post(highcommand_url, json=data)
+            discord_data = {"content": f"{ping_text} 🚨 **LSS Bot Alert - User: {LEITSTELLENSPIEL_USERNAME} | {BOT_VERSION} **\n>>> {message}",  "allowed_mentions": {"parse": ["roles"]}}
+            try: requests.post(highcommand_url, json=discord_data)
             except requests.exceptions.RequestException: print("FEHLER: Discord-Benachrichtigung senden fehlgeschlagen.")
 
     if "discord_webhook_url" in config and config["discord_webhook_url"]:
-        data = {"content": f"ℹ️ **LSS Bot Message:**\n>>> {message}"}
-        try: requests.post(config["discord_webhook_url"], json=data)
+        discord_data = {"content": f"{ping_text} ℹ️ **LSS Bot Message:**\n>>> {message}",  "allowed_mentions": {"parse": ["roles"]}}
+        try: requests.post(config["discord_webhook_url"], json=discord_data)
         except requests.exceptions.RequestException: print("FEHLER: Discord-Benachrichtigung senden fehlgeschlagen.")
 
 def check_and_claim_daily_bonus(driver, wait):
