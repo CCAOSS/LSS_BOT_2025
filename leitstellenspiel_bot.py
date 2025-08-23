@@ -59,7 +59,7 @@ if not VEHICLE_DATABASE:
     print("Bot wird beendet, da die Fahrzeug-Datenbank nicht geladen werden konnte."); time.sleep(10); sys.exit()
 
 # --- Bot-Konfiguration ---
-BOT_VERSION = "V1.0.1 - Release Build"
+BOT_VERSION = "V1.0.2 - Release Build"
 PAUSE_IF_NO_VEHICLES_SECONDS = 300
 MAX_START_DELAY_SECONDS = 3600
 MINIMUM_CREDITS = 10000
@@ -134,16 +134,25 @@ class StatusWindow(tk.Tk):
             key, value = message
 
             # Je nach Schlüssel die richtige Variable aktualisieren
-            if key == 'status':
-                self.status_var.set(value)
-            elif key == 'mission_name':
-                self.mission_name_var.set(value)
-            elif key == 'requirements':
-                self.requirements_var.set(value)
-            elif key == 'availability':
-                self.availability_var.set(value)
-            elif key == 'alarm_status':
-                self.alarm_status_var.set(value)
+            if key == 'batch_update':
+                for update_key, update_value in value.items():
+                    # Hier die Logik von oben, um die richtige Variable zu setzen
+                    if update_key == 'status': self.status_var.set(update_value)
+                    elif update_key == 'mission_name': self.mission_name_var.set(update_value)
+                    elif update_key == 'alarm_status': self.alarm_status_var.set(update_value)
+                    elif update_key == 'requirements': self.requirements_var.set(update_value)
+                    elif update_key == 'availability': self.availability_var.set(update_value)
+            else:
+                if key == 'status':
+                    self.status_var.set(value)
+                elif key == 'mission_name':
+                    self.mission_name_var.set(value)
+                elif key == 'requirements':
+                    self.requirements_var.set(value)
+                elif key == 'availability':
+                    self.availability_var.set(value)
+                elif key == 'alarm_status':
+                    self.alarm_status_var.set(value)
 
         except queue.Empty:
             # Wenn die Queue leer ist, passiert nichts.
@@ -191,6 +200,7 @@ def setup_driver():
     chrome_options.add_argument("--log-level=3")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--blink-settings=imagesEnabled=false")
     
     # ================================================================= #
     # NEUE, STABILISIERENDE FLAGS                                       #
@@ -227,24 +237,42 @@ def get_mission_requirements(driver, wait, player_inventory, given_patients):
     
     # --- ANPASSBARE ÜBERSETZUNGS-LISTE ---
     translation_map = {
-        "Feuerwehrkran": "FwK",
+        "Feuerwehrkräne (FwK)": "FwK",
         "Drehleitern": "Drehleiter",
         "Rettungswagen": "RTW",
         "Löschfahrzeuge": "Löschfahrzeug",
         "Gerätewagen Öl": "GW-Öl",
         "Seenotrettungsboote": "Seenotrettungsboot",
+        "Funkstreifenwagen (Dienstgruppenleitung)": "FuStW (DGL)"
     }
     # --- ENDE ANPASSBARE ÜBERSETZUNGS-LISTE ---
 
     raw_requirements = {'fahrzeuge': [], 'patienten': 0, 'personal': 0, 'wasser': 0, 'schaummittel': 0, 'credits': 0}
     try:
-        wait.until(EC.element_to_be_clickable((By.XPATH, "//a[contains(text(), 'Hilfe')]"))).click()
+       
+        # SCHRITT 1: In den iFrame wechseln
+        try:
+            print("Info: Versuche, in den Einsatz-iFrame zu wechseln...")
+            # Wartet auf den ersten verfügbaren iFrame auf der Seite und wechselt hinein.
+            wait.until(EC.frame_to_be_available_and_switch_to_it((By.TAG_NAME, "iframe")))
+            print("Info: Erfolgreich in iFrame gewechselt.")
+        except TimeoutException:
+            # Sollte nicht passieren, aber als Sicherheitsnetz
+            print("FEHLER: Konnte den Einsatz-iFrame nicht finden.")
+            return None
+
+        # SCHRITT 2: Jetzt im iFrame nach dem Hilfe-Button suchen und klicken
+        hilfe_button_xpath = "//*[@id='mission_help']" 
+        print(f"Info: Suche (im iFrame) nach Hilfe-Button mit XPath: {hilfe_button_xpath}")
+        wait.until(EC.element_to_be_clickable((By.XPATH, hilfe_button_xpath))).click()
+        print("Info: Hilfe-Button erfolgreich geklickt.")
+
         try:
             vehicle_table = wait.until(EC.visibility_of_element_located((By.XPATH, "//table[.//th[contains(text(), 'Fahrzeuge')]]")))
             rows = vehicle_table.find_elements(By.XPATH, ".//tbody/tr")
 
             def normalize_name(name):
-                clean = name.split('(')[0].strip().replace("Benötigte ", "")
+                clean = name.replace("Benötigte ", "")
                 return translation_map.get(clean, clean)
 
             def player_has_vehicle_of_type(required_type, inventory, database):
@@ -266,7 +294,7 @@ def get_mission_requirements(driver, wait, player_inventory, given_patients):
                 is_optional = "anforderungswahrscheinlichkeit" in requirement_text.lower() or "nur angefordert, wenn vorhanden" in requirement_text.lower()
                 
                 # Bereinige den Namen, egal ob Wahrscheinlichkeit oder nicht
-                clean_name = requirement_text.split('(')[0].strip().replace("nur angefordert, wenn vorhanden", "").replace("Anforderungswahrscheinlichkeit", "").replace("Benötigte", "").strip()
+                clean_name = requirement_text.replace("nur angefordert, wenn vorhanden", "").replace("Anforderungswahrscheinlichkeit", "").replace("Benötigte", "").strip()
                 
                 # Wenn es eine Wahrscheinlichkeits-Anforderung ist...
                 if is_optional:
@@ -283,15 +311,15 @@ def get_mission_requirements(driver, wait, player_inventory, given_patients):
                 
                 # Prüft ob fahrzeug eine Wahrscheinlichkeit hatte
                 if clean_name in prob_table:
-                    print("Fahrzeug hatte eine Wahrscheinlichkeit!")
+                    print(f"Fahrzeug {clean_name} hatte eine Wahrscheinlichkeit!")
                     if count_text.isdigit():
                             for _ in range(int(count_text)):
-                                raw_requirements['fahrzeuge'].append(["Löschfahrzeug", "Tanklöschfahrzeug"])
+                                raw_requirements['fahrzeuge'].append([clean_name])
                     continue
 
                 # Dies ist der Code für alle normalen (festen) Anforderungen
                 req_lower_clean = clean_name.lower()
-                if any(keyword in req_lower_clean for keyword in ["schlauchwagen", "personal", "feuerwehrleute", "wasser", "schaummittel", "feuerlöschpumpe"]):
+                if any(keyword in req_lower_clean for keyword in ["schlauchwagen", "personal", "feuerwehrleute", "wasser", "sonderlöschmittelbedarf", "feuerlöschpumpe"]):
                     if "personal" in req_lower_clean or "feuerwehrleute" in req_lower_clean:
                         if count_text.isdigit(): raw_requirements['personal'] += int(count_text)
                     elif "schlauchwagen" in req_lower_clean:
@@ -300,7 +328,7 @@ def get_mission_requirements(driver, wait, player_inventory, given_patients):
                             for _ in range(int(count_text)): raw_requirements['fahrzeuge'].append(["Schlauchwagen"])
                     elif "wasser" in req_lower_clean:
                         if count_text.isdigit(): raw_requirements['wasser'] += int(count_text)
-                    elif "schaummittel" in req_lower_clean:
+                    elif "sonderlöschmittelbedarf" in req_lower_clean:
                         if count_text.isdigit(): raw_requirements['schaummittel'] += int(count_text)
                     elif "feuerlöschpumpe" in req_lower_clean:
                         if count_text.isdigit():
@@ -346,11 +374,14 @@ def get_mission_requirements(driver, wait, player_inventory, given_patients):
         raw_requirements['patienten'] = calculated_patients
 
     except TimeoutException: 
+        print(f"FEHLER: Der 'Hilfe'-Button mit XPath {hilfe_button_xpath} konnte auch im iFrame nicht gefunden werden.")
         return None
     finally:
         try: 
-            wait.until(EC.element_to_be_clickable((By.XPATH, "//a[text()='Zurück']"))).click()
+            wait.until(EC.element_to_be_clickable((By.XPATH, "//a[text()='Zurück' or @class='close' or contains(text(), 'Schließen')]"))).click()
+            print("Info: Hilfe-Fenster geschlossen.")
         except: 
+            print("Warnung: Konnte Hilfe-Fenster nicht schließen. Lade Seite neu als Fallback.")
             driver.refresh()
     return raw_requirements
 
@@ -367,8 +398,14 @@ def get_available_vehicles(driver, wait):
             load_more_button_selector = "//a[contains(@class, 'missing_vehicles_load')]"
             load_more_button = driver.find_element(By.XPATH, load_more_button_selector)
             print("Info: 'Fehlende Fahrzeuge laden'-Button gefunden. Klicke ihn...")
+
+            vehicle_table = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, vehicle_table_selector)))
+            initial_rows = len(vehicle_table.find_elements(By.XPATH, ".//tbody/tr"))
+
             driver.execute_script("arguments[0].click();", load_more_button)
-            time.sleep(2)
+
+            wait.until(lambda d: len(d.find_element(By.CSS_SELECTOR, vehicle_table_selector).find_elements(By.XPATH, ".//tbody/tr")) > initial_rows)
+            print("Info: Zusätzliche Fahrzeuge wurden geladen.")
         except NoSuchElementException:
             print("Info: Alle Fahrzeuge werden bereits angezeigt.")
 
@@ -767,21 +804,39 @@ def main_bot_logic(gui_vars):
             if not gui_vars['pause_event'].is_set():
                 gui_vars['gui_queue'].put(('status', "Bot pausiert...")); gui_vars['pause_event'].wait()
 
-            gui_vars['gui_queue'].put(('status', "Prüfe Status (Boni, etc.)...")); driver.get("https://www.leitstellenspiel.de/"); wait.until(EC.presence_of_element_located((By.ID, "missions_outer")))
-            today = date.today();
+            # 1. Zurück zur Hauptseite und Status-Checks durchführen
+            gui_vars['gui_queue'].put(('status', "Prüfe Status (Boni, etc.)...")); driver.get("https://www.leitstellenspiel.de/")
+            wait.until(EC.presence_of_element_located((By.ID, "missions_outer"))) # Kurz warten, bis die Seite da ist
+            today = date.today()
             if last_check_date != today: bonus_checked_today = False; last_check_date = today
             if not bonus_checked_today: check_and_claim_daily_bonus(driver, wait); bonus_checked_today = True
             check_and_claim_tasks(driver, wait)
             handle_sprechwunsche(driver, wait)
-            
+
+            # 2. Einsatzliste sammeln
             try: 
-                gui_vars['gui_queue'].put(('status', "Lade Einsatzliste...")); driver.get("https://www.leitstellenspiel.de/"); mission_list_container = wait.until(EC.presence_of_element_located((By.ID, "missions_outer")))
+                gui_vars['gui_queue'].put(('status', "Lade Einsatzliste..."))
+
+                #warten bis einsatzliste geladen hat
+                try:
+                    wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "#missions_outer .missionSideBarEntry")))
+                except TimeoutException:
+                    # Wenn nach 30s kein Einsatz da ist, ist die Liste wirklich leer.
+                    gui_vars['gui_queue'].put(('status', f"Keine Einsätze. Warte {30}s...")); time.sleep(30); continue
+
+                mission_list_container = wait.until(EC.presence_of_element_located((By.ID, "missions_outer")))
                 mission_entries = mission_list_container.find_elements(By.XPATH, ".//div[contains(@class, 'missionSideBarEntry')]")
-                mission_data = []; current_mission_ids = set()
+
+                mission_data = [] 
+                current_mission_ids = set()
+
                 for entry in mission_entries:
                     try:
-                        mission_id = entry.get_attribute('mission_id'); url_element = entry.find_element(By.XPATH, ".//a[contains(@class, 'mission-alarm-button')]"); href = url_element.get_attribute('href')
-                        name_element = entry.find_element(By.XPATH, ".//a[contains(@id, 'mission_caption_')]"); full_name = name_element.text.strip(); name = full_name.split(',')[0].strip()
+                        mission_id = entry.get_attribute('mission_id') 
+                        url_element = entry.find_element(By.XPATH, ".//a[contains(@id, 'mission_caption_')]")
+                        full_name = url_element.text.strip()
+                        name = full_name.split(',')[0].strip()
+
                         patient_count = 0; timeleft = 0
                         sort_data_str = entry.get_attribute('data-sortable-by')
                         if sort_data_str:
@@ -790,22 +845,43 @@ def main_bot_logic(gui_vars):
                         try:
                             countdown_element = entry.find_element(By.XPATH, ".//div[contains(@id, 'mission_overview_countdown_')]")
                             timeleft_str = countdown_element.get_attribute('timeleft')
-                            if timeleft_str and timeleft_str.isdigit(): timeleft = int(timeleft_str)
-                        except NoSuchElementException: pass
-                        if href and name and mission_id:
-                            mission_data.append({'id': mission_id, 'url': href, 'name': name, 'patienten': patient_count, 'timeleft': timeleft}); current_mission_ids.add(mission_id)
-                    except (NoSuchElementException, json.JSONDecodeError): continue
+                            if timeleft_str and timeleft_str.isdigit(): 
+                                timeleft = int(timeleft_str)
+                        except NoSuchElementException: 
+                            pass
+
+                        if name and mission_id:
+                            # KORREKTUR 2: Speichere nur die ID, nicht das Element selbst.
+                            mission_data.append({
+                                'id': mission_id, 
+                                'name': name, 
+                                'patienten': patient_count, 
+                                'timeleft': timeleft
+                            })
+                            current_mission_ids.add(mission_id)
+                    except (NoSuchElementException, json.JSONDecodeError): 
+                        continue
+                    
                 dispatched_mission_ids.intersection_update(current_mission_ids)
                 if not mission_data:
                     gui_vars['gui_queue'].put(('status', f"Keine Einsätze. Warte {30}s...")); time.sleep(30); continue
                 gui_vars['gui_queue'].put(('status', f"{len(mission_data)} Einsätze gefunden. Bearbeite..."))
+
+                # 3. Einsätze nacheinander abarbeiten
                 for i, mission in enumerate(mission_data):
+
                     if gui_vars['stop_event'].is_set(): break
                     if not gui_vars['pause_event'].is_set(): gui_vars['gui_queue'].put(('status' ,"Bot pausiert...")); gui_vars['pause_event'].wait()
-                    if "[Verband]" in mission['name'] or mission['id'] in dispatched_mission_ids: continue
+
+                    #prüfung ob einsatz übersprungen werden muss (noch nicht bearbeitete einsatz kategorien)
+                    if "[Verband]" in mission['name'] or mission['id'] in dispatched_mission_ids: 
+                        continue
                     
                     if mission['name'].lower() == "krankentransport":
                         print("INFO: Krankentransport skipped")
+                        continue
+                    if mission['name'].lower() == " intensivverlegung":
+                        print("INFO: intensivverlegung skipped")
                         continue
 
                     if mission['timeleft'] > MAX_START_DELAY_SECONDS:
@@ -813,25 +889,41 @@ def main_bot_logic(gui_vars):
                         print(f"Info: Ignoriere zukünftigen Einsatz '{mission['name']}' (Start in {mission['timeleft'] // 60} min)"); continue
                     
                     print(f"-----------------{mission['name']}-----------------")
-                    gui_vars['gui_queue'].put(('mission_name', f"({i+1}/{len(mission_data)}) {mission['name']}")); driver.get(mission['url'])
+                    gui_vars['gui_queue'].put(('mission_name', f"({i+1}/{len(mission_data)}) {mission['name']}")) 
 
-                    #//reset gui
-                    gui_vars['gui_queue'].put(('status', "Lade nächsten einsatz"))
-                    gui_vars['gui_queue'].put(('alarm_status', "Status: "))
-                    gui_vars['gui_queue'].put(('requirements', "Bedarf: "))
-                    gui_vars['gui_queue'].put(('availability', "Verfügbar: "))
+                    try:
+                       # SCHRITT 1: Finde den GRÜNEN Alarm-Button in der Seitenleiste
+                        sidebar_alarm_button_xpath = f"//div[@mission_id='{mission['id']}']//a[contains(@class, 'mission-alarm-button')]"
+                        element_to_click = wait.until(EC.element_to_be_clickable((By.XPATH, sidebar_alarm_button_xpath)))
+                        
+                        print("Info: Klicke auf den grünen 'Alarmieren'-Button in der Seitenleiste...")
+                        driver.execute_script("arguments[0].click();", element_to_click)
+                        
+                        # SCHRITT 2: Warte als Bestätigung auf den HAUPT-Alarm-Button auf der Einsatzseite.
+                        # Wir verwenden die dynamische ID, die du entdeckt hast.
+                        main_alarm_button_id = f"alarm_button_{mission['id']}"
+                        print(f"Info: Warte auf Haupt-Alarm-Button mit der ID: {main_alarm_button_id}")
+                        wait.until(EC.presence_of_element_located((By.ID, main_alarm_button_id)))
+                        print("Info: Alarmierungs-Ansicht erfolgreich geladen.")
+                    except Exception as e:
+                        print(f"FEHLER: Konnte nicht zum Einsatz '{mission['name']}' navigieren. Überspringe. Fehler: {e}")
+                        driver.get("https://www.leitstellenspiel.de/") # Als Fallback zur Hauptseite zurück
+                        continue
+
+                    print("lade requirements")
 
                     existing_patients = mission["patienten"]
                     raw_requirements = get_mission_requirements(driver, wait, player_inventory, existing_patients)
                     if not raw_requirements: continue
-                    
+
                     if mission['timeleft'] > 0 and raw_requirements.get('credits', 0) < MINIMUM_CREDITS:
                         gui_vars['gui_queue'].put(('status', f"Event bringt zuwenig credits {raw_requirements.get('credits', 0)} - überspringt"))
                         print(f"Info: Ignoriere unrentablen zukünftigen Einsatz '{mission['name']}' (Credits: {raw_requirements.get('credits', 0)} < {MINIMUM_CREDITS})"); continue
 
                     # Anforderungs-Aufbereitung bleibt gleich...
                     final_requirements = raw_requirements # Vereinfacht, da die alte Aufbereitung entfernt wurde
-                    
+                    print("requirements geladen")
+
                     # GUI-Anzeige für Bedarf bleibt gleich...
                     req_parts = []; readable_requirements = [" oder ".join(options) for options in final_requirements['fahrzeuge']]
                     vehicle_counts = Counter(readable_requirements)
@@ -889,7 +981,39 @@ def main_bot_logic(gui_vars):
                             alarm_button = driver.find_element(By.XPATH, "//input[@value='Alarmieren']"); driver.execute_script("arguments[0].click();", alarm_button)
                     else:
                         gui_vars['gui_queue'].put(('status', "❌ Nicht genug Einheiten frei.")); gui_vars['gui_queue'].put(('alarm_status', "Status: WARTE AUF EINHEITEN"))
-                    time.sleep(3)
+
+                    short_wait = WebDriverWait(driver, 3) 
+                    try:
+                        print("Info: Prüfe, ob die Einsatz-Ansicht noch geschlossen werden muss...")
+                        # 1. Versuche, in den iFrame zu wechseln (mit kurzem Timeout)
+                        short_wait.until(EC.frame_to_be_available_and_switch_to_it((By.TAG_NAME, "iframe")))
+                        
+                        # 2. Wenn das geklappt hat, ist die Ansicht noch offen -> Klicke "Schließen"
+                        print("Info: Einsatz-Ansicht ist offen, schließe sie...")
+                        close_button_xpath = "//*[@id='lightbox_close_inside']"
+                        short_wait.until(EC.element_to_be_clickable((By.XPATH, close_button_xpath))).click()
+
+                    except TimeoutException:
+                        # 3. Wenn iFrame oder Button nach 3s nicht da sind, ist alles ok.
+                        # Die Ansicht wurde vermutlich schon automatisch geschlossen.
+                        print("Info: Einsatz-Ansicht bereits geschlossen. Mache weiter.")
+                        pass  # Einfach ignorieren und weitermachen
+                    finally:
+                        # 4. WICHTIG: Unabhängig davon, was passiert ist, stellen wir sicher,
+                        # dass der Bot für die nächste Runde im Haupt-Kontext ist.
+                        driver.switch_to.default_content()
+
+                    wait.until(EC.visibility_of_element_located((By.ID, "missions_outer")))
+
+                        #//reset gui
+                    update_data = {
+                        'status': "Lade nächsten Einsatz...",
+                        'alarm_status': "Status: -",
+                        'requirements': "Bedarf: -",
+                        'availability': "Verfügbar: -"
+                    }
+                    gui_vars['gui_queue'].put(('batch_update', update_data))
+
             except Exception as e:
                 print(f"Fehler im Verarbeitungszyklus: {e}"); traceback.print_exc(); time.sleep(10)
     except Exception as e:

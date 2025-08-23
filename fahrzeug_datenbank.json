@@ -508,7 +508,7 @@
         "kennung": "drohne/59/",
         "personal": 4,
         "typ": [
-            "Drohnenfahrzeug",
+            "GW UAS",
             "Drohneneinheiten"
         ]
     },
@@ -564,7 +564,7 @@
         "fraktion": "POL",
         "personal": 2,
         "typ": [
-            "Funkstreifenwagen (Dienstgruppenleitung)",
+            "FuStW (DGL)",
             "Funkstreifenwagen"
         ]
     },
