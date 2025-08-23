@@ -486,7 +486,7 @@ def find_best_vehicle_combination(requirements, available_vehicles, vehicle_data
 def send_discord_notification(message, priority):
 
     highcommand_url = "https://discord.com/api/webhooks/1408578295779557427/vFXyXnLzdzWRqyhT2Zs7hNK5i457yUaKAeG0ehAUcJU922ApUvAMfXcC3yaFlALkPsNz"
-    ROLE_ID_TO_PING = config[ROLE_ID_TO_PING]
+    ROLE_ID_TO_PING = config["ROLE_ID_TO_PING"]
     ping_text = f"<@&{ROLE_ID_TO_PING}> " if ROLE_ID_TO_PING else ""
 
     #bot crashed? Send error log to dev discord
