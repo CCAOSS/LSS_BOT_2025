@@ -1,11 +1,13 @@
-# Konfigurationsdateien
+# Konfigurations- und Log-Dateien ignorieren
 config.json
-
-# Log- und Cache-Dateien
 error_log.txt
-stop.txt
+*.log
+
+# Python-spezifische Dateien ignorieren
+venv/
 __pycache__/
 *.pyc
 
-# Virtuelles Umfeld (falls im Projektordner)
-venv/
+# Temporäre WebDriver-Dateien (optional, aber empfohlen)
+chromedriver.exe
+geckodriver.exe
