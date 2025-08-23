@@ -900,14 +900,14 @@ if __name__ == "__main__":
         "db_updated_flag": False  # NEU: Der "Merker" für das Datenbank-Update
     }
     
-    bot_thread = threading.Thread(target=main_bot_logic, args=(gui_variables,), daemon=True)
+    bot_thread = threading.Thread(target=main_bot_logic, args=(gui_variables,))
     bot_thread.start()
 
     app.mainloop()
 
-    # ==============================================================================
-    # NEU: DIESER CODE WIRD NACH DEM SCHLIESSEN DES FENSTERS AUSGEFÜHRT
-    # ==============================================================================
+    print("Fenster geschlossen. Warte auf sauberes Herunterfahren des Bot-Threads...")
+    bot_thread.join()
+
     # Wir prüfen den "Merker", den der Bot-Thread eventuell gesetzt hat
     if gui_variables.get("db_updated_flag", False):
         # Wir erstellen ein unsichtbares Hauptfenster, nur um das Pop-up zu zeigen
