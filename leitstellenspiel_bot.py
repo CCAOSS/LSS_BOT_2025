@@ -370,18 +370,22 @@ def find_best_vehicle_combination(requirements, available_vehicles, vehicle_data
     (z.B. "FuStw oder Polizeimotorrad") korrekt als EINEN zu füllenden Slot zu behandeln,
     anstatt fälschlicherweise beide Fahrzeuge anzufordern.
     """
-    # 1. Vorbereitung der Anforderungen (unverändert)
+    # 1. Vorbereitung der Anforderungen (unverändert)a
     needed_vehicle_options_list = requirements.get('fahrzeuge', [])
     needed_personal = requirements.get('personal', 0)
     needed_wasser = requirements.get('wasser', 0)
     needed_schaummittel = requirements.get('schaummittel', 0)
     patient_bedarf = requirements.get('patienten', 0)
 
-    if patient_bedarf > 5:
+    KTW_B_allowed = patient_bedarf > 5
+
+    if patient_bedarf >= 5:
+        print("INFO: MANV 5")
         needed_vehicle_options_list.append(["KdoW-LNA"])
-    if patient_bedarf > 10: # Korrigiert von elif zu if
         needed_vehicle_options_list.append(["GW-San"])
         needed_vehicle_options_list.append(["ELW 1 (SEG)"])
+    if patient_bedarf >= 10: 
+        print("INFO: MANV 10+")
         needed_vehicle_options_list.append(["KdoW-OrgL"])
 
     explicit_rtw_count = sum(1 for options in needed_vehicle_options_list if "RTW" in options)
@@ -390,7 +394,11 @@ def find_best_vehicle_combination(requirements, available_vehicles, vehicle_data
     final_rtw_bedarf = max(explicit_rtw_count, rtws_to_add)
     print(f"DEBUG: RTW BEDARF {final_rtw_bedarf}x")
     for _ in range(final_rtw_bedarf):
-        needed_vehicle_options_list.append(["RTW"])
+        if KTW_B_allowed:
+            print("DEBUG: KTW-B erlaubt!")
+            needed_vehicle_options_list.append(["RTW", "KTW Typ B"])
+        else:
+            needed_vehicle_options_list.append(["RTW"])
 
     # ==============================================================================
     # START DER KORRIGIERTEN AUSWAHL-LOGIK FÜR FAHRZEUG-SLOTS
