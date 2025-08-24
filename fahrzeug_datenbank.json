@@ -494,7 +494,7 @@
     "GW-San": {
         "fraktion": "RD",
         "personal": 6,
-        "typ": "GW-San"
+        "typ": ["GW-San"]
     },
     "Rettungshundefahrzeug": {
         "fraktion": "RD",
@@ -678,12 +678,12 @@
     "MTW-O": {
         "fraktion": "THW",
         "personal": 5,
-        "typ": "Rettungshundestaffeln"
+        "typ": ["Rettungshundestaffeln"]
     },
     "MzGW (FGr N)": {
         "fraktion": "THW",
         "personal": 9,
-        "typ": "MzGW (FGr N)"
+        "typ": ["MzGW (FGr N)"]
     },
     "MLW 5": {
         "fraktion": "THW",
@@ -702,7 +702,7 @@
     "Anh Hund": {
         "fraktion": "THW",
         "personal": 0,
-        "typ": "Rettungshundestaffeln"
+        "typ": ["Rettungshundestaffeln"]
     },
     "LKW K 9": {
         "fraktion": "THW",
@@ -892,14 +892,14 @@
     },
     "SW 2000": {
         "fraktion": "FW",
-        "personal": 3,
+        "personal": 6,
         "typ": [
             "SW 2000"
         ]
     },
     "SW Kats": {
         "fraktion": "FW",
-        "personal": 9,
+        "personal": 6,
         "typ": [
             "SW Kats"
         ]
@@ -909,6 +909,27 @@
         "personal": 3,
         "typ": [
             "GefKw"
+        ]
+    },
+    "Polizeimotorrad": {
+        "fraktion": "POL",
+        "personal": 1,
+        "typ": [
+            "Polizeimotorrad"
+        ]
+    },
+    "NEA200": {
+        "fraktion": "THW",
+        "personal": 0,
+        "typ": [
+            "NEA200"
+        ]
+    },
+    "LKW 7 Lbw (FGr E)": {
+        "fraktion": "THW",
+        "personal": 3,
+        "typ": [
+            "LKW 7 Lbw (FGr E)"
         ]
     }
 }
