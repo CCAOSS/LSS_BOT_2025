@@ -880,7 +880,7 @@ def main_bot_logic(gui_vars):
                     if mission['name'].lower() == "krankentransport":
                         print("INFO: Krankentransport skipped")
                         continue
-                    if mission['name'].lower() == " intensivverlegung":
+                    if "intensivverlegung" in mission['name'].lower():
                         print("INFO: intensivverlegung skipped")
                         continue
 
