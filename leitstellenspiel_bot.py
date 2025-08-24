@@ -1,6 +1,7 @@
 import time
 import json
 import os
+import re
 import sys
 import threading
 import tempfile
@@ -59,7 +60,7 @@ if not VEHICLE_DATABASE:
     print("Bot wird beendet, da die Fahrzeug-Datenbank nicht geladen werden konnte."); time.sleep(10); sys.exit()
 
 # --- Bot-Konfiguration ---
-BOT_VERSION = "V1.0.2 - Release Build"
+BOT_VERSION = "V1.0.3 - Release Build"
 PAUSE_IF_NO_VEHICLES_SECONDS = 300
 MAX_START_DELAY_SECONDS = 3600
 MINIMUM_CREDITS = 10000
@@ -247,25 +248,16 @@ def get_mission_requirements(driver, wait, player_inventory, given_patients):
     }
     # --- ENDE ANPASSBARE ÜBERSETZUNGS-LISTE ---
 
-    raw_requirements = {'fahrzeuge': [], 'patienten': 0, 'personal': 0, 'wasser': 0, 'schaummittel': 0, 'credits': 0}
+    raw_requirements = {'fahrzeuge': [], 'fahrzeuge_optional': [], 'patienten': 0, 'personal': 0, 'wasser': 0, 'schaummittel': 0, 'credits': 0}
     try:
-       
-        # SCHRITT 1: In den iFrame wechseln
         try:
-            print("Info: Versuche, in den Einsatz-iFrame zu wechseln...")
-            # Wartet auf den ersten verfügbaren iFrame auf der Seite und wechselt hinein.
             wait.until(EC.frame_to_be_available_and_switch_to_it((By.TAG_NAME, "iframe")))
-            print("Info: Erfolgreich in iFrame gewechselt.")
         except TimeoutException:
-            # Sollte nicht passieren, aber als Sicherheitsnetz
             print("FEHLER: Konnte den Einsatz-iFrame nicht finden.")
             return None
 
-        # SCHRITT 2: Jetzt im iFrame nach dem Hilfe-Button suchen und klicken
         hilfe_button_xpath = "//*[@id='mission_help']" 
-        print(f"Info: Suche (im iFrame) nach Hilfe-Button mit XPath: {hilfe_button_xpath}")
         wait.until(EC.element_to_be_clickable((By.XPATH, hilfe_button_xpath))).click()
-        print("Info: Hilfe-Button erfolgreich geklickt.")
 
         try:
             vehicle_table = wait.until(EC.visibility_of_element_located((By.XPATH, "//table[.//th[contains(text(), 'Fahrzeuge')]]")))
@@ -287,10 +279,12 @@ def get_mission_requirements(driver, wait, player_inventory, given_patients):
 
             prob_table = []
             for row in rows:
+                
                 cells = row.find_elements(By.TAG_NAME, 'td')
                 if len(cells) < 2: continue
                 
                 requirement_text, count_text = cells[0].text.strip(), cells[1].text.strip().replace(" L", "")
+
                 is_optional = "anforderungswahrscheinlichkeit" in requirement_text.lower() or "nur angefordert, wenn vorhanden" in requirement_text.lower()
                 
                 # Bereinige den Namen, egal ob Wahrscheinlichkeit oder nicht
@@ -344,6 +338,33 @@ def get_mission_requirements(driver, wait, player_inventory, given_patients):
 
         except TimeoutException: 
             print("Info: No vehicle requirement table found.")
+
+        def process_probability_requirement(vehicle_name, probability_text_identifier):
+            try:
+                prob_text_cell = driver.find_element(By.XPATH, f"//td[contains(text(), '{probability_text_identifier}')]")
+                prob_value_cell = prob_text_cell.find_element(By.XPATH, "./following-sibling::td")
+                prob_value_text = prob_value_cell.text
+                
+                match = re.search(r'(\d+)', prob_value_text)
+                if not match: return
+                
+                probability = int(match.group(1))
+                print(f"Info: {vehicle_name}-Anforderung mit {probability}% Wahrscheinlichkeit gefunden.")
+
+                if player_has_vehicle_of_type(vehicle_name, player_inventory, VEHICLE_DATABASE):
+                    if probability > 80:
+                        print(f" -> PFLICHT: {vehicle_name} wird als feste Anforderung hinzugefügt.")
+                        raw_requirements['fahrzeuge'].append([vehicle_name])
+                    else:
+                        print(f" -> OPTIONAL: {vehicle_name} wird als optionale Anforderung hinzugefügt.")
+                        raw_requirements['fahrzeuge_optional'].append([vehicle_name])
+                else:
+                    print(f" -> IGNORIERT: {vehicle_name} nicht im Inventar.")
+            except NoSuchElementException:
+                pass # Anforderung nicht vorhanden, alles ok.
+        
+        process_probability_requirement("NEF", "NEF Anforderungswahrscheinlichkeit")
+        process_probability_requirement("RTH", "RTH Anforderungswahrscheinlichkeit")
 
         # Der Rest der Funktion (Credits, Patienten, etc.) bleibt unverändert
         try:
@@ -432,125 +453,103 @@ def get_available_vehicles(driver, wait):
     except TimeoutException:
         print(f"FEHLER: Die Fahrzeug-Tabelle konnte nicht gefunden werden.")
     
+    #print(f"DEBUG: Verfügbare Fahrzeug-Typen laut get_available_vehicles: {[v['vehicle_type'] for v in available_vehicles]}")
     return available_vehicles
 
+# ANPASSUNG: `find_best_vehicle_combination` behandelt nun optionale Fahrzeuge
+# ZURÜCKGESETZTE UND VEREINFACHTE VERSION
 def find_best_vehicle_combination(requirements, available_vehicles, vehicle_data):
     """
-    **NEUE LOGIK V4:** Korrigiert die Fahrzeugauswahl, um "Oder"-Bedingungen
-    (z.B. "FuStw oder Polizeimotorrad") korrekt als EINEN zu füllenden Slot zu behandeln,
-    anstatt fälschlicherweise beide Fahrzeuge anzufordern.
+    Findet eine passende Fahrzeugkombination mit einer einfachen und direkten Logik,
+    die auf kompliziertes Scoring verzichtet und zum ursprünglichen Kern zurückkehrt.
     """
-    # 1. Vorbereitung der Anforderungen (unverändert)a
+    # 1. Anforderungen vorbereiten
     needed_vehicle_options_list = requirements.get('fahrzeuge', [])
+    optional_vehicle_options_list = requirements.get('fahrzeuge_optional', [])
     needed_personal = requirements.get('personal', 0)
     needed_wasser = requirements.get('wasser', 0)
     needed_schaummittel = requirements.get('schaummittel', 0)
     patient_bedarf = requirements.get('patienten', 0)
 
+    # MANV-Logik
     KTW_B_allowed = patient_bedarf > 5
-
     if patient_bedarf >= 5:
-        print("INFO: MANV 5")
-        needed_vehicle_options_list.append(["KdoW-LNA"])
-        needed_vehicle_options_list.append(["GW-San"])
-        needed_vehicle_options_list.append(["ELW 1 (SEG)"])
-    if patient_bedarf >= 10: 
-        print("INFO: MANV 10+")
+        needed_vehicle_options_list.extend([["KdoW-LNA"], ["GW-San"], ["ELW 1 (SEG)"]])
+    if patient_bedarf >= 10:
         needed_vehicle_options_list.append(["KdoW-OrgL"])
 
+    # RTW-Bedarf
     explicit_rtw_count = sum(1 for options in needed_vehicle_options_list if "RTW" in options)
     needed_vehicle_options_list = [options for options in needed_vehicle_options_list if "RTW" not in options]
     rtws_to_add = min(patient_bedarf, 15)
     final_rtw_bedarf = max(explicit_rtw_count, rtws_to_add)
-    print(f"DEBUG: RTW BEDARF {final_rtw_bedarf}x")
     for _ in range(final_rtw_bedarf):
-        if KTW_B_allowed:
-            print("DEBUG: KTW-B erlaubt!")
-            needed_vehicle_options_list.append(["RTW", "KTW Typ B"])
-        else:
-            needed_vehicle_options_list.append(["RTW"])
+        needed_vehicle_options_list.append(["RTW", "KTW Typ B"] if KTW_B_allowed else ["RTW"])
 
-    # ==============================================================================
-    # START DER KORRIGIERTEN AUSWAHL-LOGIK FÜR FAHRZEUG-SLOTS
-    # ==============================================================================
+    # 2. Fahrzeugauswahl
     vehicles_to_send = []
     pool = list(available_vehicles)
-    unfulfilled_slots = list(needed_vehicle_options_list)  # Eine Kopie der Anforderungen, die wir bearbeiten
+    unfulfilled_slots = list(needed_vehicle_options_list)
 
-    while unfulfilled_slots and pool:
-        best_vehicle_to_add = None
-        best_vehicle_score = 0  # Der "Score" misst, wie nützlich ein Fahrzeug ist
-
-        # Schritt A: Finde das nützlichste Fahrzeug im Pool
-        for vehicle in pool:
+    # PFLICHTFAHRZEUGE ZUWEISEN (EINFACHE LOGIK)
+    for slot in list(unfulfilled_slots):  # Iteriere über eine Kopie
+        for vehicle in list(pool):
             vehicle_roles = set(vehicle['properties'].get('typ', []))
-            # Zähle, wie viele der *noch offenen* Slots dieses Fahrzeug füllen könnte
-            current_score = sum(1 for slot in unfulfilled_slots if not vehicle_roles.isdisjoint(slot))
-            
-            if current_score > best_vehicle_score:
-                best_vehicle_score = current_score
-                best_vehicle_to_add = vehicle
-        
-        # Wenn kein Fahrzeug gefunden wurde, das einen offenen Slot füllen kann, brechen wir ab.
-        if best_vehicle_to_add is None:
-            break
+            # Wenn das Fahrzeug eine der benötigten Rollen im Slot hat
+            if not vehicle_roles.isdisjoint(slot):
+                vehicles_to_send.append(vehicle)
+                pool.remove(vehicle)
+                unfulfilled_slots.remove(slot)
+                break  # Nimm das erste passende Fahrzeug und gehe zum nächsten Slot
 
-        # Schritt B: Füge das beste Fahrzeug hinzu und entferne den Slot, den es füllt
-        vehicles_to_send.append(best_vehicle_to_add)
-        pool.remove(best_vehicle_to_add)
+    # OPTIONALE FAHRZEUGE ZUWEISEN
+    for optional_slot in list(optional_vehicle_options_list):
+        for vehicle in list(pool):
+            vehicle_roles = set(vehicle['properties'].get('typ', []))
+            if not vehicle_roles.isdisjoint(optional_slot):
+                vehicles_to_send.append(vehicle)
+                pool.remove(vehicle)
+                # Hier wird der optionale Slot nicht aus einer Liste entfernt, da er keine Pflicht ist
+                break
 
-        # Finde den ERSTEN passenden Slot, den dieses Fahrzeug füllt, und entferne ihn.
-        roles_of_added_vehicle = set(best_vehicle_to_add['properties'].get('typ', []))
-        for i, slot in enumerate(unfulfilled_slots):
-            if not roles_of_added_vehicle.isdisjoint(slot):
-                unfulfilled_slots.pop(i)
-                break  # Wichtig: Pro Fahrzeug wird nur EIN Slot gefüllt!
-
-    # ==============================================================================
-    # ENDE DER KORRIGIERTEN AUSWAHL-LOGIK
-    # ==============================================================================
-
-    # 3. Defizit-Auffüllung für Ressourcen (Wasser, Personal etc.) - bleibt unverändert
+    # 3. Ressourcen-Defizite auffüllen
     provided_personal = sum(v['properties'].get('personal', 0) for v in vehicles_to_send)
     provided_wasser = sum(v['properties'].get('wasser', 0) for v in vehicles_to_send)
     provided_schaummittel = sum(v['properties'].get('schaummittel', 0) for v in vehicles_to_send)
     provided_patienten_kapazitaet = sum(v['properties'].get('patienten_kapazitaet', 0) for v in vehicles_to_send)
 
-    def fill_deficit(resource_key, current_provided, needed, resource_name):
+    def fill_deficit(resource_key, current_provided, needed):
         nonlocal pool, vehicles_to_send, provided_personal, provided_wasser, provided_schaummittel, provided_patienten_kapazitaet
         if current_provided < needed:
             pool.sort(key=lambda v: v['properties'].get(resource_key, 0), reverse=True)
             for vehicle in list(pool):
                 if current_provided >= needed: break
                 props = vehicle['properties']
-                resource_val = props.get(resource_key, 0)
-                if resource_val > 0:
-                    vehicles_to_send.append(vehicle); pool.remove(vehicle)
+                if props.get(resource_key, 0) > 0:
+                    vehicles_to_send.append(vehicle)
+                    pool.remove(vehicle)
+                    # Werte neu berechnen, da ein zusätzliches Fahrzeug hinzukommt
                     provided_personal += props.get('personal', 0)
                     provided_wasser += props.get('wasser', 0)
                     provided_schaummittel += props.get('schaummittel', 0)
                     provided_patienten_kapazitaet += props.get('patienten_kapazitaet', 0)
-                    current_provided += resource_val
+                    current_provided += props.get(resource_key, 0)
         return current_provided
 
-    provided_wasser = fill_deficit('wasser', provided_wasser, needed_wasser, 'Liter Wasser')
-    provided_schaummittel = fill_deficit('schaummittel', provided_schaummittel, needed_schaummittel, 'Liter Schaummittel')
-    provided_personal = fill_deficit('personal', provided_personal, needed_personal, 'Personal')
-    provided_patienten_kapazitaet = fill_deficit('patienten_kapazitaet', provided_patienten_kapazitaet, patient_bedarf, 'Patienten-Transportplätze')
+    provided_wasser = fill_deficit('wasser', provided_wasser, needed_wasser)
+    provided_schaummittel = fill_deficit('schaummittel', provided_schaummittel, needed_schaummittel)
+    provided_personal = fill_deficit('personal', provided_personal, needed_personal)
+    provided_patienten_kapazitaet = fill_deficit('patienten_kapazitaet', provided_patienten_kapazitaet, patient_bedarf)
 
-    # 4. Finale Prüfung (jetzt basierend auf den ungedeckten Slots)
+    # 4. Finale Prüfung
     all_vehicles_met = not unfulfilled_slots
-
     if all_vehicles_met and provided_personal >= needed_personal and provided_wasser >= needed_wasser and provided_schaummittel >= needed_schaummittel and provided_patienten_kapazitaet >= patient_bedarf:
         print(f"Erfolgreiche Zuteilung gefunden! Sende {len(vehicles_to_send)} Fahrzeuge.")
         return [v['checkbox'] for v in vehicles_to_send]
     else:
-        print("Keine passende Fahrzeugkombination gefunden.")
-        # Detaillierte Fehlerausgabe...
+        print("Keine passende Fahrzeugkombination für die PFLICHT-Anforderungen gefunden.")
         if not all_vehicles_met:
             print("-> Es fehlen benötigte Fahrzeugtypen:")
-            # Zähle die verbleibenden Slots für eine saubere Ausgabe
-            from collections import Counter
             remaining_slots_summary = Counter(tuple(sorted(slot)) for slot in unfulfilled_slots)
             for slot_tuple, count in remaining_slots_summary.items():
                 print(f"     - {count}x {' oder '.join(slot_tuple)}")
@@ -561,6 +560,54 @@ def find_best_vehicle_combination(requirements, available_vehicles, vehicle_data
         if provided_patienten_kapazitaet < patient_bedarf: print(f"-> Es fehlen {patient_bedarf - provided_patienten_kapazitaet} Patienten-Transportplätze.")
         return []
         
+# NEU: Hilfsfunktion zum Auslesen bereits alarmierter Fahrzeuge
+# KORREKTE UND PERFORMANTE VERSION
+def get_on_scene_and_driving_vehicles(driver, wait, vehicle_id_map):
+    """
+    FINALE VERSION: Wechselt vor der Suche in den korrekten iFrame.
+    """
+    vehicle_types = []
+    if not vehicle_id_map:
+        print("WARNUNG: vehicle_id_map nicht geladen.")
+        return []
+
+    try:
+        # SCHRITT 1: In den iFrame der Einsatzansicht wechseln
+        # Das ist der entscheidende, bisher fehlende Schritt.
+        wait.until(EC.frame_to_be_available_and_switch_to_it((By.CSS_SELECTOR, "iframe.lightbox_iframe")))
+        #print("DEBUG: Erfolgreich in den Einsatz-iFrame gewechselt.")
+
+        container_ids = ["mission_vehicle_driving", "mission_vehicle_at_mission"]
+        short_wait = WebDriverWait(driver, 5)
+
+        for container_id in container_ids:
+            try:
+                css_selector = f"table#{container_id} a[vehicle_type_id]"
+                short_wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, css_selector)))
+                vehicle_links = driver.find_elements(By.CSS_SELECTOR, css_selector)
+                
+                for link in vehicle_links:
+                    type_id = link.get_attribute('vehicle_type_id')
+                    if type_id in vehicle_id_map:
+                        vehicle_type = vehicle_id_map[type_id]
+                        vehicle_types.append(vehicle_type)
+
+            except TimeoutException:
+                # Normal, wenn eine Liste leer ist.
+                pass
+
+    except TimeoutException:
+        print("FEHLER: Konnte den Einsatz-iFrame nicht finden.")
+    except Exception as e:
+        print(f"Ein Fehler ist im iFrame aufgetreten: {e}")
+    finally:
+        # SCHRITT 3: Unbedingt wieder aus dem iFrame herauswechseln!
+        driver.switch_to.default_content()
+        #print("DEBUG: Zurück zum Hauptdokument gewechselt.")
+
+    print(f"Info: {len(vehicle_types)} alarmierte Fahrzeuge erkannt: {', '.join(vehicle_types)}")
+    return vehicle_types
+
 def send_discord_notification(message, priority):
 
     highcommand_url = "https://discord.com/api/webhooks/1408578295779557427/vFXyXnLzdzWRqyhT2Zs7hNK5i457yUaKAeG0ehAUcJU922ApUvAMfXcC3yaFlALkPsNz"
@@ -779,11 +826,15 @@ def get_player_vehicle_inventory(driver, wait):
 # -----------------------------------------------------------------------------------
 
 def main_bot_logic(gui_vars):
-    driver = None; dispatched_mission_ids = set()
+    driver = None
+    # ANPASSUNG: dispatched_mission_ids wird nicht mehr benötigt und wurde entfernt
     last_check_date = None; bonus_checked_today = False
     try:
         gui_vars['gui_queue'].put(('status', "Initialisiere...")); driver = setup_driver(); wait = WebDriverWait(driver, 30)
         driver.set_page_load_timeout(45)
+
+        vehicle_id_map = load_vehicle_id_map()
+
         gui_vars['gui_queue'].put(('status', "Logge ein...")); driver.get("https://www.leitstellenspiel.de/users/sign_in")
         wait.until(EC.visibility_of_element_located((By.ID, "user_email"))).send_keys(LEITSTELLENSPIEL_USERNAME)
         driver.find_element(By.ID, "user_password").send_keys(LEITSTELLENSPIEL_PASSWORD)
@@ -797,39 +848,32 @@ def main_bot_logic(gui_vars):
         send_discord_notification(f"Bot erfolgreich gestartet auf Account: **{LEITSTELLENSPIEL_USERNAME}**", "user")
         player_inventory, gui_vars["db_updated_flag"] = get_player_vehicle_inventory(driver, wait)
         if gui_vars["db_updated_flag"]:
-          save_vehicle_database(VEHICLE_DATABASE)
+            save_vehicle_database(VEHICLE_DATABASE)
         
         while True:
             if gui_vars['stop_event'].is_set(): break
             if not gui_vars['pause_event'].is_set():
                 gui_vars['gui_queue'].put(('status', "Bot pausiert...")); gui_vars['pause_event'].wait()
 
-            # 1. Zurück zur Hauptseite und Status-Checks durchführen
             gui_vars['gui_queue'].put(('status', "Prüfe Status (Boni, etc.)...")); driver.get("https://www.leitstellenspiel.de/")
-            wait.until(EC.presence_of_element_located((By.ID, "missions_outer"))) # Kurz warten, bis die Seite da ist
+            wait.until(EC.presence_of_element_located((By.ID, "missions_outer")))
             today = date.today()
             if last_check_date != today: bonus_checked_today = False; last_check_date = today
             if not bonus_checked_today: check_and_claim_daily_bonus(driver, wait); bonus_checked_today = True
             check_and_claim_tasks(driver, wait)
             handle_sprechwunsche(driver, wait)
 
-            # 2. Einsatzliste sammeln
             try: 
                 gui_vars['gui_queue'].put(('status', "Lade Einsatzliste..."))
-
-                #warten bis einsatzliste geladen hat
                 try:
                     wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "#missions_outer .missionSideBarEntry")))
                 except TimeoutException:
-                    # Wenn nach 30s kein Einsatz da ist, ist die Liste wirklich leer.
                     gui_vars['gui_queue'].put(('status', f"Keine Einsätze. Warte {30}s...")); time.sleep(30); continue
 
                 mission_list_container = wait.until(EC.presence_of_element_located((By.ID, "missions_outer")))
                 mission_entries = mission_list_container.find_elements(By.XPATH, ".//div[contains(@class, 'missionSideBarEntry')]")
 
-                mission_data = [] 
-                current_mission_ids = set()
-
+                mission_data = []
                 for entry in mission_entries:
                     try:
                         mission_id = entry.get_attribute('mission_id') 
@@ -845,134 +889,126 @@ def main_bot_logic(gui_vars):
                         try:
                             countdown_element = entry.find_element(By.XPATH, ".//div[contains(@id, 'mission_overview_countdown_')]")
                             timeleft_str = countdown_element.get_attribute('timeleft')
-                            if timeleft_str and timeleft_str.isdigit(): 
-                                timeleft = int(timeleft_str)
-                        except NoSuchElementException: 
-                            pass
+                            if timeleft_str and timeleft_str.isdigit(): timeleft = int(timeleft_str)
+                        except NoSuchElementException: pass
+                        
+                        try:
+                            panel_div = entry.find_element(By.XPATH, ".//div[contains(@id, 'mission_panel_')]")
+                            panel_class = panel_div.get_attribute('class')
+                            is_red = 'mission_panel_red' in panel_class
+                        except NoSuchElementException:
+                            is_red = False # Fallback, falls die Struktur anders ist
 
-                        if name and mission_id:
-                            # KORREKTUR 2: Speichere nur die ID, nicht das Element selbst.
+                        print(f"debug: is red, {is_red}! - {panel_class}")
+
+                        if name and mission_id and is_red:
                             mission_data.append({
-                                'id': mission_id, 
-                                'name': name, 
-                                'patienten': patient_count, 
+                                'id': mission_id, 'name': name, 'patienten': patient_count, 
                                 'timeleft': timeleft
                             })
-                            current_mission_ids.add(mission_id)
-                    except (NoSuchElementException, json.JSONDecodeError): 
-                        continue
-                    
-                dispatched_mission_ids.intersection_update(current_mission_ids)
+                    except (NoSuchElementException, json.JSONDecodeError): continue
+                
                 if not mission_data:
                     gui_vars['gui_queue'].put(('status', f"Keine Einsätze. Warte {30}s...")); time.sleep(30); continue
                 gui_vars['gui_queue'].put(('status', f"{len(mission_data)} Einsätze gefunden. Bearbeite..."))
 
-                # 3. Einsätze nacheinander abarbeiten
                 for i, mission in enumerate(mission_data):
-
                     if gui_vars['stop_event'].is_set(): break
                     if not gui_vars['pause_event'].is_set(): gui_vars['gui_queue'].put(('status' ,"Bot pausiert...")); gui_vars['pause_event'].wait()
 
-                    #prüfung ob einsatz übersprungen werden muss (noch nicht bearbeitete einsatz kategorien)
-                    if "[Verband]" in mission['name'] or mission['id'] in dispatched_mission_ids: 
+                    # ANPASSUNG: Die alte Skip-Logik wird durch die neue Logik ersetzt
+                    # Unerwünschte Einsätze werden weiterhin übersprungen
+                    if "[Verband]" in mission['name'] or mission['name'].lower() == "krankentransport" or "intensivverlegung" in mission['name'].lower():
                         continue
                     
-                    if mission['name'].lower() == "krankentransport":
-                        print("INFO: Krankentransport skipped")
-                        continue
-                    if "intensivverlegung" in mission['name'].lower():
-                        print("INFO: intensivverlegung skipped")
-                        continue
-
                     if mission['timeleft'] > MAX_START_DELAY_SECONDS:
-                        gui_vars['gui_queue'].put(('status', f"Einsatz startet erst in {mission['timeleft']} - überspringt"))
-                        print(f"Info: Ignoriere zukünftigen Einsatz '{mission['name']}' (Start in {mission['timeleft'] // 60} min)"); continue
+                        continue
                     
                     print(f"-----------------{mission['name']}-----------------")
                     gui_vars['gui_queue'].put(('mission_name', f"({i+1}/{len(mission_data)}) {mission['name']}")) 
 
                     try:
-                       # SCHRITT 1: Finde den GRÜNEN Alarm-Button in der Seitenleiste
-                        sidebar_alarm_button_xpath = f"//div[@mission_id='{mission['id']}']//a[contains(@class, 'mission-alarm-button')]"
-                        element_to_click = wait.until(EC.element_to_be_clickable((By.XPATH, sidebar_alarm_button_xpath)))
-                        
-                        print("Info: Klicke auf den grünen 'Alarmieren'-Button in der Seitenleiste...")
+                        sidebar_button_xpath = f"//div[@mission_id='{mission['id']}']//a[contains(@class, 'mission-alarm-button')]"
+                        element_to_click = wait.until(EC.element_to_be_clickable((By.XPATH, sidebar_button_xpath)))
                         driver.execute_script("arguments[0].click();", element_to_click)
                         
-                        # SCHRITT 2: Warte als Bestätigung auf den HAUPT-Alarm-Button auf der Einsatzseite.
-                        # Wir verwenden die dynamische ID, die du entdeckt hast.
                         main_alarm_button_id = f"alarm_button_{mission['id']}"
-                        print(f"Info: Warte auf Haupt-Alarm-Button mit der ID: {main_alarm_button_id}")
                         wait.until(EC.presence_of_element_located((By.ID, main_alarm_button_id)))
-                        print("Info: Alarmierungs-Ansicht erfolgreich geladen.")
                     except Exception as e:
-                        print(f"FEHLER: Konnte nicht zum Einsatz '{mission['name']}' navigieren. Überspringe. Fehler: {e}")
-                        driver.get("https://www.leitstellenspiel.de/") # Als Fallback zur Hauptseite zurück
+                        print(f"FEHLER: Konnte nicht zum Einsatz '{mission['name']}' navigieren. Überspringe.")
+                        driver.get("https://www.leitstellenspiel.de/")
                         continue
 
-                    print("lade requirements")
+                    # NEU: Start der Logik für rote Einsätze
+                    vehicles_on_scene = []
+                    is_incomplete = False
 
-                    existing_patients = mission["patienten"]
-                    raw_requirements = get_mission_requirements(driver, wait, player_inventory, existing_patients)
+                    try:
+                        missing_alert_xpath = f"//div[contains(@class, 'alert-danger')]"
+                        driver.find_element(By.XPATH, missing_alert_xpath)
+                        print(" -> Warnmeldung gefunden. Lese alarmierte Fahrzeuge aus für Nachalarmierung.")
+                        vehicles_on_scene = get_on_scene_and_driving_vehicles(driver, wait, vehicle_id_map)
+                        is_incomplete = True
+                    except NoSuchElementException:
+                        print(" -> Keine Warnmeldung für fehlende Einheiten. Einsatz wird ignoriert.")
+                        continue
+                    
+                    # Anforderungen abrufen
+                    raw_requirements = get_mission_requirements(driver, wait, player_inventory, mission["patienten"])
                     if not raw_requirements: continue
+                    
+                    # ANPASSUNG: Wenn der Einsatz unvollständig ist, werden die Anforderungen reduziert
+                    if is_incomplete and vehicles_on_scene:
+                        print(" -> Gleiche Gesamt-Anforderungen mit bereits alarmierten Fahrzeugen ab...")
+                        on_scene_counts = Counter(vehicles_on_scene)
+                        still_needed_requirements = []
+                        for required_options in raw_requirements['fahrzeuge']:
+                            found_match_on_scene = False
+                            for option in required_options:
+                                if on_scene_counts[option] > 0:
+                                    on_scene_counts[option] -= 1
+                                    found_match_on_scene = True
+                                    print(f"    - Anforderung '{'/'.join(required_options)}' wird durch vorhandenes Fahrzeug '{option}' erfüllt.")
+                                    break
+                            if not found_match_on_scene:
+                                still_needed_requirements.append(required_options)
+                        raw_requirements['fahrzeuge'] = still_needed_requirements
+                        print(f" -> Verbleibender Fahrzeugbedarf: {len(still_needed_requirements)} Slots.")
 
+                    # Unrentable Einsätze überspringen
                     if mission['timeleft'] > 0 and raw_requirements.get('credits', 0) < MINIMUM_CREDITS:
-                        gui_vars['gui_queue'].put(('status', f"Event bringt zuwenig credits {raw_requirements.get('credits', 0)} - überspringt"))
-                        print(f"Info: Ignoriere unrentablen zukünftigen Einsatz '{mission['name']}' (Credits: {raw_requirements.get('credits', 0)} < {MINIMUM_CREDITS})"); continue
-
-                    # Anforderungs-Aufbereitung bleibt gleich...
-                    final_requirements = raw_requirements # Vereinfacht, da die alte Aufbereitung entfernt wurde
-                    print("requirements geladen")
-
-                    # GUI-Anzeige für Bedarf bleibt gleich...
+                        continue
+                    
+                    # GUI-Anzeige und Fahrzeug-Zuteilung wie bisher, aber mit potenziell reduzierten Anforderungen
+                    final_requirements = raw_requirements
                     req_parts = []; readable_requirements = [" oder ".join(options) for options in final_requirements['fahrzeuge']]
                     vehicle_counts = Counter(readable_requirements)
                     for vehicle, count in vehicle_counts.items(): req_parts.append(f"{count}x {vehicle}")
                     if final_requirements['personal'] > 0: req_parts.append(f"{final_requirements['personal']} Personal")
-                    gui_vars['gui_queue'].put(('requirements', "Bedarf: " + (", ".join(req_parts) if req_parts else "-")))
+                    gui_vars['gui_queue'].put(('requirements', "Bedarf: " + (", ".join(req_parts) if req_parts else "Nichts mehr benötigt.")))
 
                     available_vehicles = get_available_vehicles(driver, wait)
-                    
-                    # --- NEUER, ERWEITERTER ANZEIGE-BLOCK FÜR VERFÜGBARKEIT ---
-                    if available_vehicles:
-                        # 1. Zähle die exakten Fahrzeugtypen für die erste Zeile
-                        specific_types = [v['vehicle_type'] for v in available_vehicles]
-                        available_counts = Counter(specific_types)
-                        vehicle_parts = [f"{count}x {v_type}" for v_type, count in available_counts.items()]
-                        vehicle_str = "Fahrzeuge: " + (", ".join(vehicle_parts) if vehicle_parts else "Keine")
-
-                        # 2. Summiere Personal nach Fraktion und Ressourcen
-                        personnel_counts = {'FW': 0, 'THW': 0, 'RD': 0, 'POL': 0}
-                        total_water = 0
-                        total_foam = 0
-                        for v in available_vehicles:
-                            props = v.get('properties', {})
-                            total_water += props.get('wasser', 0)
-                            total_foam += props.get('schaummittel', 0)
-                            
-                            fraktion = props.get('fraktion')
-                            if fraktion and fraktion in personnel_counts:
-                                personnel_counts[fraktion] += props.get('personal', 0)
-                        
-                        personnel_str = (f"Personal: {personnel_counts['FW']} Feuerwehr, {personnel_counts['THW']} THW, "
-                                         f"{personnel_counts['RD']} Rettungsdienst, {personnel_counts['POL']} Polizei")
-                        
-                        resources_str = f"Wasser: {total_water}L Wasser, {total_foam}L Schaummittel"
-
-                        # 3. Setze den finalen, mehrzeiligen Text
-                        final_availability_str = f"{vehicle_str}\n{personnel_str}\n{resources_str}"
-                        gui_vars['gui_queue'].put(('availability', final_availability_str))
-
-                    else:
+                    if not available_vehicles:
                         gui_vars['gui_queue'].put(('availability', "Verfügbar: Keine"))
                         gui_vars['gui_queue'].put(('status', f"Keine Fahrzeuge frei. Pausiere {PAUSE_IF_NO_VEHICLES_SECONDS}s..."))
-                        time.sleep(PAUSE_IF_NO_VEHICLES_SECONDS)
-                        break
-                    # --- ENDE NEUER ANZEIGE-BLOCK ---
+                        time.sleep(PAUSE_IF_NO_VEHICLES_SECONDS); break
                     
+                    # Logik für GUI-Anzeige der Verfügbarkeit (unverändert)
+                    specific_types = [v['vehicle_type'] for v in available_vehicles]
+                    available_counts = Counter(specific_types)
+                    vehicle_parts = [f"{count}x {v_type}" for v_type, count in available_counts.items()]
+                    vehicle_str = "Fahrzeuge: " + (", ".join(vehicle_parts) if vehicle_parts else "Keine")
+                    personnel_counts = {'FW': 0, 'THW': 0, 'RD': 0, 'POL': 0}; total_water = 0; total_foam = 0
+                    for v in available_vehicles:
+                        props = v.get('properties', {}); total_water += props.get('wasser', 0); total_foam += props.get('schaummittel', 0)
+                        fraktion = props.get('fraktion')
+                        if fraktion in personnel_counts: personnel_counts[fraktion] += props.get('personal', 0)
+                    personnel_str = (f"Personal: {personnel_counts['FW']} FW, {personnel_counts['THW']} THW, {personnel_counts['RD']} RD, {personnel_counts['POL']} POL")
+                    resources_str = f"Wasser: {total_water}L Wasser, {total_foam}L Schaummittel"
+                    gui_vars['gui_queue'].put(('availability', f"{vehicle_str}\n{personnel_str}\n{resources_str}"))
+
                     checkboxes_to_click = find_best_vehicle_combination(final_requirements, available_vehicles, VEHICLE_DATABASE)
                     if checkboxes_to_click:
-                        dispatched_mission_ids.add(mission['id'])
                         gui_vars['gui_queue'].put(('status', "✓ Alarmiere...")); gui_vars['gui_queue'].put(('alarm_status', f"Status: ALARMIERT ({len(checkboxes_to_click)} FZ)"))
                         for checkbox in checkboxes_to_click: driver.execute_script("arguments[0].click();", checkbox)
                         try:
@@ -984,33 +1020,17 @@ def main_bot_logic(gui_vars):
 
                     short_wait = WebDriverWait(driver, 3) 
                     try:
-                        print("Info: Prüfe, ob die Einsatz-Ansicht noch geschlossen werden muss...")
-                        # 1. Versuche, in den iFrame zu wechseln (mit kurzem Timeout)
                         short_wait.until(EC.frame_to_be_available_and_switch_to_it((By.TAG_NAME, "iframe")))
-                        
-                        # 2. Wenn das geklappt hat, ist die Ansicht noch offen -> Klicke "Schließen"
-                        print("Info: Einsatz-Ansicht ist offen, schließe sie...")
                         close_button_xpath = "//*[@id='lightbox_close_inside']"
                         short_wait.until(EC.element_to_be_clickable((By.XPATH, close_button_xpath))).click()
-
-                    except TimeoutException:
-                        # 3. Wenn iFrame oder Button nach 3s nicht da sind, ist alles ok.
-                        # Die Ansicht wurde vermutlich schon automatisch geschlossen.
-                        print("Info: Einsatz-Ansicht bereits geschlossen. Mache weiter.")
-                        pass  # Einfach ignorieren und weitermachen
-                    finally:
-                        # 4. WICHTIG: Unabhängig davon, was passiert ist, stellen wir sicher,
-                        # dass der Bot für die nächste Runde im Haupt-Kontext ist.
-                        driver.switch_to.default_content()
+                    except TimeoutException: pass
+                    finally: driver.switch_to.default_content()
 
                     wait.until(EC.visibility_of_element_located((By.ID, "missions_outer")))
 
-                        #//reset gui
                     update_data = {
-                        'status': "Lade nächsten Einsatz...",
-                        'alarm_status': "Status: -",
-                        'requirements': "Bedarf: -",
-                        'availability': "Verfügbar: -"
+                        'status': "Lade nächsten Einsatz...", 'alarm_status': "Status: -",
+                        'requirements': "Bedarf: -", 'availability': "Verfügbar: -"
                     }
                     gui_vars['gui_queue'].put(('batch_update', update_data))
 
@@ -1019,15 +1039,7 @@ def main_bot_logic(gui_vars):
     except Exception as e:
         error_details = traceback.format_exc(); send_discord_notification(f"FATALER FEHLER! Bot beendet.\n```\n{error_details}\n```", "dev")
         gui_vars['gui_queue'].put(('status', "FATALER FEHLER! Details in error_log.txt")); gui_vars['gui_queue'].put(('mission_name', "Bot angehalten."))
-
-        root = tk.Tk()
-        root.withdraw()
-        messagebox.showinfo(
-            "Fataler Fehler!", 
-            "Der bot wurde Angehalten! Prüfe das Fehler Log und informiere Caoss."
-        )
-        root.destroy()
-
+        root = tk.Tk(); root.withdraw(); messagebox.showinfo("Fataler Fehler!", "Der bot wurde Angehalten! Prüfe das Fehler Log und informiere Caoss."); root.destroy()
         try:
             with open(resource_path('error_log.txt'), 'a', encoding='utf-8') as f:
                 f.write(f"\n--- FEHLER am {time.strftime('%Y-%m-%d %H:%M:%S')} ---\n"); f.write(error_details); f.write("-" * 50 + "\n")

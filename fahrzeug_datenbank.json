@@ -494,7 +494,9 @@
     "GW-San": {
         "fraktion": "RD",
         "personal": 6,
-        "typ": ["GW-San"]
+        "typ": [
+            "GW-San"
+        ]
     },
     "Rettungshundefahrzeug": {
         "fraktion": "RD",
@@ -503,13 +505,13 @@
             "Rettungshundestaffeln"
         ]
     },
-    "GW UAS": {
+    "GW-UAS": {
         "fraktion": "RD",
         "kennung": "drohne/59/",
         "personal": 4,
         "typ": [
-            "GW UAS",
-            "Drohneneinheiten"
+            "Drohneneinheiten",
+            "GW-UAS"
         ]
     },
     "ELW 1 (SEG)": {
@@ -610,7 +612,7 @@
             "MEK-Fahrzeuge"
         ]
     },
-    "WaWe": {
+    "Wasserwerfer": {
         "fraktion": "POL",
         "kennung": "WaWe",
         "personal": 5,
@@ -678,12 +680,16 @@
     "MTW-O": {
         "fraktion": "THW",
         "personal": 5,
-        "typ": ["Rettungshundestaffeln"]
+        "typ": [
+            "Rettungshundestaffeln"
+        ]
     },
     "MzGW (FGr N)": {
         "fraktion": "THW",
         "personal": 9,
-        "typ": ["MzGW (FGr N)"]
+        "typ": [
+            "MzGW (FGr N)"
+        ]
     },
     "MLW 5": {
         "fraktion": "THW",
@@ -702,7 +708,9 @@
     "Anh Hund": {
         "fraktion": "THW",
         "personal": 0,
-        "typ": ["Rettungshundestaffeln"]
+        "typ": [
+            "Rettungshundestaffeln"
+        ]
     },
     "LKW K 9": {
         "fraktion": "THW",
@@ -729,7 +737,7 @@
         "fraktion": "THW",
         "personal": 0,
         "typ": [
-            "Anh DLE"
+            "Anhänger Drucklufterzeugung"
         ]
     },
     "NEA50": {
@@ -930,6 +938,14 @@
         "personal": 3,
         "typ": [
             "LKW 7 Lbw (FGr E)"
+        ]
+    },
+    "GW UAS": {
+        "fraktion": "",
+        "personal": 0,
+        "typ": [
+            "Drohneneinheiten",
+            "GW UAS"
         ]
     }
 }
