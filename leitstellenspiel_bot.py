@@ -584,13 +584,20 @@ def find_best_vehicle_combination(requirements, available_vehicles, vehicle_data
             print(f"Info: Dynamischer Bedarf von {deficit}x Betreuungsausstattung berechnet.")
             # Finde verfügbare Betreuungsfahrzeuge und füge sie hinzu
             betreuungs_fahrzeuge = [v for v in pool if "Betreuungsausstattung" in v['properties'].get('typ', [])]
+            betreuungs_personal_fahrzeuge = [v for v in pool if "Betreuungsausstattung_Personal" in v['properties'].get('typ', [])]
             for _ in range(deficit):
                 if not betreuungs_fahrzeuge:
                     print("Warnung: Nicht genügend Betreuungsfahrzeuge verfügbar.")
                     break
+                if not betreuungs_personal_fahrzeuge:
+                    print("Warnung: Nicht genügend Betreuungsfahrzeuge verfügbar.")
+                    break
                 vehicle_to_add = betreuungs_fahrzeuge.pop(0)
+                vehicle_to_add_2 = betreuungs_personal_fahrzeuge.pop(0)
                 vehicles_to_send.append(vehicle_to_add)
+                vehicles_to_send.append(vehicle_to_add_2)
                 pool.remove(vehicle_to_add)
+                pool.remove(vehicle_to_add_2)
     # --- ENDE DER NEUEN LOGIK ---
 
 

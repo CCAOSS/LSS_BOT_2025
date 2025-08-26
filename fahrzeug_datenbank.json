@@ -379,7 +379,6 @@
     },
     "ULF mit Löscharm": {
         "fraktion": "FW",
-        "kennung": "29/",
         "personal": 3,
         "typ": [
             "ULF mit Löscharm"
@@ -818,21 +817,21 @@
         "fraktion": "FW",
         "personal": 0,
         "typ": [
-            "GW-Küche"
+            "Betreuungsausstattung"
         ]
     },
     "GW-Bt": {
         "fraktion": "RD",
         "personal": 0,
         "typ": [
-            "GW-Bt"
+            "Betreuungsausstattung"
         ]
     },
     "Bt-Kombi": {
         "fraktion": "RD",
         "personal": 0,
         "typ": [
-            "Bt-Kombi"
+            "Betreuungsausstattung_Personal"
         ]
     },
     "LKW 7 Lbw (FGr WP)": {
