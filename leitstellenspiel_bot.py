@@ -61,7 +61,7 @@ if not VEHICLE_DATABASE:
     print("Bot wird beendet, da die Fahrzeug-Datenbank nicht geladen werden konnte."); time.sleep(10); sys.exit()
 
 # --- Bot-Konfiguration ---
-BOT_VERSION = "V1.0.4 - Release Build"
+BOT_VERSION = "V1.0.5 - Release Build"
 PAUSE_IF_NO_VEHICLES_SECONDS = 300
 MAX_START_DELAY_SECONDS = 3600
 MINIMUM_CREDITS = 10000
@@ -966,7 +966,7 @@ def main_bot_logic(gui_vars):
                 gui_vars['gui_queue'].put(('status', "Bot pausiert...")); gui_vars['pause_event'].wait()
 
             gui_vars['gui_queue'].put(('status', "Prüfe Status (Boni, etc.)...")); driver.get("https://www.leitstellenspiel.de/")
-            wait.until(EC.presence_of_element_located((By.ID, "missions_outer")))
+            wait.until(EC.presence_of_element_located((By.ID, "missions_outer")), 120)
             today = date.today()
             if last_check_date != today: bonus_checked_today = False; last_check_date = today
             if not bonus_checked_today: check_and_claim_daily_bonus(driver, wait); bonus_checked_today = True
@@ -1157,9 +1157,13 @@ def main_bot_logic(gui_vars):
             except Exception as e:
                 print(f"Fehler im Verarbeitungszyklus: {e}"); traceback.print_exc(); time.sleep(10)
     except Exception as e:
+        print("FATALER FEHLER! Erstelle Screenshot 'fehler.png'...")
+        if driver:
+            driver.save_screenshot('fehler.png')
+
         error_details = traceback.format_exc(); send_discord_notification(f"FATALER FEHLER! Bot beendet.\n```\n{error_details}\n```", "dev")
         gui_vars['gui_queue'].put(('status', "FATALER FEHLER! Details in error_log.txt")); gui_vars['gui_queue'].put(('mission_name', "Bot angehalten."))
-        root = tk.Tk(); root.withdraw(); messagebox.showinfo("Fataler Fehler!", "Der bot wurde Angehalten! Prüfe das Fehler Log und informiere Caoss."); root.destroy()
+        root = tk.Tk(); root.withdraw(); messagebox.showinfo("Fataler Fehler!", "Der bot wurde Angehalten! Prüfe das Fehler Log und informiere Caoss, ggf. das Fehler.png senden."); root.destroy()
         try:
             with open(resource_path('error_log.txt'), 'a', encoding='utf-8') as f:
                 f.write(f"\n--- FEHLER am {time.strftime('%Y-%m-%d %H:%M:%S')} ---\n"); f.write(error_details); f.write("-" * 50 + "\n")
