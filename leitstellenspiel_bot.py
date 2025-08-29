@@ -1054,7 +1054,7 @@ def main_bot_logic(gui_vars):
 
                     try:
                         # ANPASSUNG: Präziserer XPath, der gezielt nach der Meldung für fehlende Fahrzeuge sucht.
-                        missing_alert_xpath = "//div[contains(@class, 'alert-missing-vehicles')]"
+                        missing_alert_xpath = "//div[starts-with(@id, 'mission_missing_')]"
                         driver.find_element(By.XPATH, missing_alert_xpath)
                         
                         print(" -> Warnmeldung für fehlende Fahrzeuge gefunden. Lese alarmierte Fahrzeuge aus für Nachalarmierung.")
@@ -1067,15 +1067,76 @@ def main_bot_logic(gui_vars):
                     # Anforderungen abrufen
                     raw_requirements = get_mission_requirements(driver, wait, player_inventory, mission['patienten'], mission['name'], mission_cache)
                     if not raw_requirements: continue
-                                        # Unrentable Einsätze überspringen
+
+                    # ### START: NEUER BLOCK FÜR PATIENTEN-ANFORDERUNGEN ###
+                    try:
+                        # Suchen, ob Patienten eine spezielle Versorgung benötigen (z.B. Notarzt)
+                        patient_alert_xpath = "//div[starts-with(@id, 'patients_missing_')]"
+                        patient_alert = driver.find_element(By.XPATH, patient_alert_xpath)
+                        alert_text = patient_alert.text
+                        print(f" -> Patienten-Anforderung gefunden: '{alert_text}'")
+
+                        # Prüfen, welche Fahrzeuge benötigt werden und zur Anforderungsliste hinzufügen
+                        if "NEF" in alert_text:
+                            raw_requirements['fahrzeuge'].append(["NEF"])
+                            print("    -> Füge 1x NEF zum Bedarf hinzu.")
+                        if "RTW" in alert_text:
+                            # Sicherheitshalber prüfen wir, ob es mehrere RTW sind, auch wenn unwahrscheinlich.
+                            # Regulärer Ausdruck, um die Zahl vor "RTW" zu finden, falls vorhanden.
+                            import re
+                            match = re.search(r'(\d+)\s*x?\s*RTW', alert_text)
+                            if match:
+                                num_rtw = int(match.group(1))
+                                for _ in range(num_rtw):
+                                    raw_requirements['fahrzeuge'].append(["RTW"])
+                                print(f"    -> Füge {num_rtw}x RTW zum Bedarf hinzu.")
+                            # Fallback, wenn nur "RTW" ohne Zahl dasteht
+                            elif "RTW" in alert_text and not match:
+                                raw_requirements['fahrzeuge'].append(["RTW"])
+                                print("    -> Füge 1x RTW zum Bedarf hinzu.")
+
+                    except NoSuchElementException:
+                        # Das ist der Normalfall, wenn keine spezielle Patientenversorgung nötig ist.
+                        pass
+                    # ### ENDE: NEUER BLOCK FÜR PATIENTEN-ANFORDERUNGEN ###
+
+                    # Unrentable Einsätze überspringen
                     if mission['timeleft'] > 0 and raw_requirements.get('credits', 0) < MINIMUM_CREDITS:
                         continue
                     
                     # ANPASSUNG: Wenn der Einsatz unvollständig ist, werden die Anforderungen reduziert
                     if is_incomplete and vehicles_on_scene:
-                        print(" -> Gleiche Gesamt-Anforderungen mit bereits alarmierten Fahrzeugen ab...")
+                        print("\n========== DEBUG: NACHALARMERUNG GESTARTET ==========")
+                        print(f"DEBUG: Gefundene Einheiten vor Ort/auf Anfahrt: {', '.join(vehicles_on_scene)}")
+
+                        provided_by_on_scene = {'personal_fw': 0, 'personal_thw': 0, 'personal_rd': 0, 'personal_pol': 0,
+                                                'wasser': 0, 'schaummittel': 0, 'patienten_kapazitaet': 0}
+
+                        for vehicle_type in vehicles_on_scene:
+                            if vehicle_type in VEHICLE_DATABASE:
+                                props = VEHICLE_DATABASE[vehicle_type]
+                                fraktion = props.get('fraktion')
+                                if fraktion == 'FW': provided_by_on_scene['personal_fw'] += props.get('personal', 0)
+                                elif fraktion == 'THW': provided_by_on_scene['personal_thw'] += props.get('personal', 0)
+                                elif fraktion == 'RD': provided_by_on_scene['personal_rd'] += props.get('personal', 0)
+                                elif fraktion == 'POL': provided_by_on_scene['personal_pol'] += props.get('personal', 0)
+                                
+                                provided_by_on_scene['wasser'] += props.get('wasser', 0)
+                                provided_by_on_scene['schaummittel'] += props.get('schaummittel', 0)
+                                provided_by_on_scene['patienten_kapazitaet'] += props.get('patienten_kapazitaet', 0)                        
+
+                        print("\nDEBUG: BEREITS ERFÜLLTE RESSOURCEN:")
+                        print(f"  - Personal FW: {provided_by_on_scene['personal_fw']}")
+                        print(f"  - Personal THW: {provided_by_on_scene['personal_thw']}")
+                        print(f"  - Personal RD: {provided_by_on_scene['personal_rd']}")
+                        print(f"  - Personal POL: {provided_by_on_scene['personal_pol']}")
+                        print(f"  - Wasser: {provided_by_on_scene['wasser']}L")
+                        print(f"  - Schaummittel: {provided_by_on_scene['schaummittel']}L")
+                        print(f"  - Patienten-Transportplätze: {provided_by_on_scene['patienten_kapazitaet']}")
+
                         on_scene_counts = Counter(vehicles_on_scene)
                         still_needed_requirements = []
+                        print("\nDEBUG: PRÜFE FAHRZEUG-ANFORDERUNGEN...")
                         for required_options in raw_requirements['fahrzeuge']:
                             found_match_on_scene = False
                             for option in required_options:
@@ -1086,8 +1147,24 @@ def main_bot_logic(gui_vars):
                                     break
                             if not found_match_on_scene:
                                 still_needed_requirements.append(required_options)
+                                print(f"    -> OFFEN: '{'/'.join(required_options)}' wird noch benötigt.")
+
                         raw_requirements['fahrzeuge'] = still_needed_requirements
+
+                        raw_requirements['personal_fw'] = max(0, raw_requirements.get('personal_fw', 0) - provided_by_on_scene['personal_fw'])
+                        raw_requirements['personal_thw'] = max(0, raw_requirements.get('personal_thw', 0) - provided_by_on_scene['personal_thw'])
+                        raw_requirements['personal_rd'] = max(0, raw_requirements.get('personal_rd', 0) - provided_by_on_scene['personal_rd'])
+                        raw_requirements['personal_pol'] = max(0, raw_requirements.get('personal_pol', 0) - provided_by_on_scene['personal_pol'])
+                        raw_requirements['wasser'] = max(0, raw_requirements.get('wasser', 0) - provided_by_on_scene['wasser'])
+                        raw_requirements['schaummittel'] = max(0, raw_requirements.get('schaummittel', 0) - provided_by_on_scene['schaummittel'])
+                        # Patientenzahl wird vom Einsatz vorgegeben, aber die Transportkapazität kann reduziert werden.
+                        raw_requirements['patienten'] = max(0, raw_requirements.get('patienten', 0) - provided_by_on_scene['patienten_kapazitaet'])
+
+                        print("\nDEBUG: FINALER BEDARF FÜR DIESEN ALARM:")
                         print(f" -> Verbleibender Fahrzeugbedarf: {len(still_needed_requirements)} Slots.")
+                        print(f" -> Verbleibender Personalbedarf: FW: {raw_requirements['personal_fw']}, THW: {raw_requirements['personal_thw']}, RD: {raw_requirements['personal_rd']}, POL: {raw_requirements['personal_pol']}")
+                        print(f" -> Verbleibender Ressourcenbedarf: Wasser: {raw_requirements['wasser']}L, Schaum: {raw_requirements['schaummittel']}L")
+                        print("========== DEBUG: NACHALARMERUNG BEENDET ==========\n")
                     
                     # GUI-Anzeige und Fahrzeug-Zuteilung wie bisher, aber mit potenziell reduzierten Anforderungen
                     final_requirements = raw_requirements
