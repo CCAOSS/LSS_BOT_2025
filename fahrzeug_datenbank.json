@@ -940,11 +940,25 @@
         ]
     },
     "GW UAS": {
-        "fraktion": "",
-        "personal": 0,
+        "fraktion": "RD",
+        "personal": 3,
         "typ": [
             "Drohneneinheiten",
             "GW UAS"
+        ]
+    },
+    "FLF": {
+        "fraktion": "FW",
+        "personal": 3,
+        "typ": [
+            "FLF"
+        ]
+    },
+    "Rettungstreppe": {
+        "fraktion": "FW",
+        "personal": 3,
+        "typ": [
+            "Rettungstreppe"
         ]
     }
 }
