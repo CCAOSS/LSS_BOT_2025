@@ -611,14 +611,6 @@
             "MEK-Fahrzeuge"
         ]
     },
-    "Wasserwerfer": {
-        "fraktion": "POL",
-        "kennung": "WaWe",
-        "personal": 5,
-        "typ": [
-            "Wasserwerfer"
-        ]
-    },
     "GruKw": {
         "fraktion": "POL",
         "personal": 5,
@@ -845,7 +837,7 @@
         "fraktion": "POL",
         "personal": 0,
         "typ": [
-            "WaWe 10"
+            "Wasserwerfer"
         ]
     },
     "MTW-Verpflegung": {

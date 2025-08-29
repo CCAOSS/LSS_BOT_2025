@@ -337,6 +337,11 @@ def get_mission_requirements(driver, wait, player_inventory, given_patients, mis
                 # Nimm die LETZTE gefundene Zahl (den Maximalwert)
                 count = int(numbers[-1]) if numbers else 0
 
+                if 'wasserwerfer' in clean_name.lower():
+                    if count_text.isdigit():
+                        for _ in range(int(count_text)): raw_requirements['fahrzeuge'].append(["Wasserwerfer"])
+                    continue
+
                 if 'polizisten' in req_lower:
                     raw_requirements['personal_pol'] += count; continue
                 elif 'personalanzahl (thw)' in req_lower:
@@ -642,20 +647,19 @@ def find_best_vehicle_combination(requirements, available_vehicles, vehicle_data
         
 # NEU: Hilfsfunktion zum Auslesen bereits alarmierter Fahrzeuge
 # KORREKTE UND PERFORMANTE VERSION
+# KORRIGIERTE UND FINALE VERSION
 def get_on_scene_and_driving_vehicles(driver, wait, vehicle_id_map):
     """
-    FINALE VERSION: Wechselt vor der Suche in den korrekten iFrame.
+    Liest Fahrzeuge aus und gibt eine Liste ALLER erfüllten Rollen/Typen zurück.
+    Beispiel: Ein "LF 20" vor Ort fügt "LF 20" und "Löschfahrzeug" zur Liste hinzu.
     """
-    vehicle_types = []
+    fulfilled_roles = [] # Die Liste enthält jetzt alle erfüllten Typen
     if not vehicle_id_map:
         print("WARNUNG: vehicle_id_map nicht geladen.")
         return []
 
     try:
-        # SCHRITT 1: In den iFrame der Einsatzansicht wechseln
-        # Das ist der entscheidende, bisher fehlende Schritt.
         wait.until(EC.frame_to_be_available_and_switch_to_it((By.CSS_SELECTOR, "iframe.lightbox_iframe")))
-        #print("DEBUG: Erfolgreich in den Einsatz-iFrame gewechselt.")
 
         container_ids = ["mission_vehicle_driving", "mission_vehicle_at_mission"]
         short_wait = WebDriverWait(driver, 5)
@@ -669,24 +673,30 @@ def get_on_scene_and_driving_vehicles(driver, wait, vehicle_id_map):
                 for link in vehicle_links:
                     type_id = link.get_attribute('vehicle_type_id')
                     if type_id in vehicle_id_map:
-                        vehicle_type = vehicle_id_map[type_id]
-                        vehicle_types.append(vehicle_type)
+                        vehicle_name = vehicle_id_map[type_id]
+                        
+                        # --- HIER IST DIE ENTSCHEIDENDE ÄNDERUNG ---
+                        # 1. Füge immer den Eigennamen des Fahrzeugs hinzu.
+                        fulfilled_roles.append(vehicle_name)
+                        
+                        # 2. Schlage die generischen Typen in der Datenbank nach und füge sie ebenfalls hinzu.
+                        if vehicle_name in VEHICLE_DATABASE:
+                            generic_types = VEHICLE_DATABASE[vehicle_name].get("typ", [])
+                            for t in generic_types:
+                                if t != vehicle_name: # Vermeide Duplikate
+                                    fulfilled_roles.append(t)
+                        # --- ENDE DER ÄNDERUNG ---
 
             except TimeoutException:
-                # Normal, wenn eine Liste leer ist.
                 pass
 
     except TimeoutException:
         print("FEHLER: Konnte den Einsatz-iFrame nicht finden.")
-    except Exception as e:
-        print(f"Ein Fehler ist im iFrame aufgetreten: {e}")
     finally:
-        # SCHRITT 3: Unbedingt wieder aus dem iFrame herauswechseln!
         driver.switch_to.default_content()
-        #print("DEBUG: Zurück zum Hauptdokument gewechselt.")
 
-    print(f"Info: {len(vehicle_types)} alarmierte Fahrzeuge erkannt: {', '.join(vehicle_types)}")
-    return vehicle_types
+    print(f"Info: Alarmierte Fahrzeuge erfüllen folgende Rollen: {', '.join(sorted(list(set(fulfilled_roles))))}")
+    return fulfilled_roles
 
 def send_discord_notification(message, priority):
 
@@ -1034,71 +1044,66 @@ def main_bot_logic(gui_vars):
                         continue
                     
                     print(f"-----------------{mission['name']}-----------------")
-                    gui_vars['gui_queue'].put(('mission_name', f"({i+1}/{len(mission_data)}) {mission['name']}")) 
+                    gui_vars['gui_queue'].put(('mission_name', f"({i+1}/{len(mission_data)}) {mission['name']}"))
 
                     try:
+                        # Schritt 1: Zum Einsatz navigieren
                         sidebar_button_xpath = f"//div[@mission_id='{mission['id']}']//a[contains(@class, 'mission-alarm-button')]"
                         element_to_click = wait.until(EC.element_to_be_clickable((By.XPATH, sidebar_button_xpath)))
                         driver.execute_script("arguments[0].click();", element_to_click)
                         
                         main_alarm_button_id = f"alarm_button_{mission['id']}"
                         wait.until(EC.presence_of_element_located((By.ID, main_alarm_button_id)))
-                    except Exception as e:
-                        print(f"FEHLER: Konnte nicht zum Einsatz '{mission['name']}' navigieren. Überspringe.")
-                        driver.get("https://www.leitstellenspiel.de/")
-                        continue
 
-                    # NEU: Start der Logik für rote Einsätze
-                    vehicles_on_scene = []
-                    is_incomplete = False
-
-                    try:
-                        # ANPASSUNG: Präziserer XPath, der gezielt nach der Meldung für fehlende Fahrzeuge sucht.
-                        missing_alert_xpath = "//div[starts-with(@id, 'mission_missing_')]"
-                        driver.find_element(By.XPATH, missing_alert_xpath)
+                        # Schritt 2: Prüfen, ob der Einsatz unvollständig ist (Nachalarmierung)
+                        vehicles_on_scene = []
+                        is_incomplete = False
+                        try:
+                            # KORREKTUR: Dieser XPath sucht jetzt sicher nach der richtigen Alarm-Box,
+                            # indem er auf die data-requirement-type Attribute in den Kind-Elementen prüft.
+                            missing_alert_xpath = "//div[contains(@class, 'alert-danger') and .//div[@data-requirement-type]]"
+                            driver.find_element(By.XPATH, missing_alert_xpath)
+                            
+                            print(" -> Warnmeldung für fehlende Einheiten gefunden. Bereite Nachalarmierung vor.")
+                            vehicles_on_scene = get_on_scene_and_driving_vehicles(driver, wait, vehicle_id_map)
+                            is_incomplete = True
+                            
+                        except NoSuchElementException:
+                            print(" -> Keine Warnmeldung für fehlende Einheiten. Einsatz wird voll bearbeitet.")
                         
-                        print(" -> Warnmeldung für fehlende Fahrzeuge gefunden. Lese alarmierte Fahrzeuge aus für Nachalarmierung.")
-                        vehicles_on_scene = get_on_scene_and_driving_vehicles(driver, wait, vehicle_id_map)
-                        is_incomplete = True
-                        
-                    except NoSuchElementException:
-                        print(" -> Keine Warnmeldung für fehlende Einheiten. Einsatz wird voll bearbeitet.")
-                    
-                    # Anforderungen abrufen
-                    raw_requirements = get_mission_requirements(driver, wait, player_inventory, mission['patienten'], mission['name'], mission_cache)
-                    if not raw_requirements: continue
+                        # Ab hier geht die Logik wie gehabt weiter...
+                        # Anforderungen abrufen
+                        raw_requirements = get_mission_requirements(driver, wait, player_inventory, mission['patienten'], mission['name'], mission_cache)
+                        if not raw_requirements: continue
 
-                    # ### START: NEUER BLOCK FÜR PATIENTEN-ANFORDERUNGEN ###
-                    try:
-                        # Suchen, ob Patienten eine spezielle Versorgung benötigen (z.B. Notarzt)
-                        patient_alert_xpath = "//div[starts-with(@id, 'patients_missing_')]"
-                        patient_alert = driver.find_element(By.XPATH, patient_alert_xpath)
-                        alert_text = patient_alert.text
-                        print(f" -> Patienten-Anforderung gefunden: '{alert_text}'")
+                        # ### START: BLOCK FÜR PATIENTEN-ANFORDERUNGEN ###
+                        try:
+                            patient_alert_xpath = "//div[starts-with(@id, 'patients_missing_')]"
+                            patient_alert = driver.find_element(By.XPATH, patient_alert_xpath)
+                            alert_text = patient_alert.text
+                            print(f" -> Patienten-Anforderung gefunden: '{alert_text}'")
 
-                        # Prüfen, welche Fahrzeuge benötigt werden und zur Anforderungsliste hinzufügen
-                        if "NEF" in alert_text:
-                            raw_requirements['fahrzeuge'].append(["NEF"])
-                            print("    -> Füge 1x NEF zum Bedarf hinzu.")
-                        if "RTW" in alert_text:
-                            # Sicherheitshalber prüfen wir, ob es mehrere RTW sind, auch wenn unwahrscheinlich.
-                            # Regulärer Ausdruck, um die Zahl vor "RTW" zu finden, falls vorhanden.
-                            import re
-                            match = re.search(r'(\d+)\s*x?\s*RTW', alert_text)
-                            if match:
-                                num_rtw = int(match.group(1))
-                                for _ in range(num_rtw):
+                            if "NEF" in alert_text:
+                                raw_requirements['fahrzeuge'].append(["NEF"])
+                                print("    -> Füge 1x NEF zum Bedarf hinzu.")
+                            if "RTW" in alert_text:
+                                # Dein Code zur Verarbeitung von RTW-Anforderungen
+                                import re
+                                match = re.search(r'(\d+)\s*x?\s*RTW', alert_text)
+                                if match:
+                                    num_rtw = int(match.group(1))
+                                    for _ in range(num_rtw):
+                                        raw_requirements['fahrzeuge'].append(["RTW"])
+                                    print(f"    -> Füge {num_rtw}x RTW zum Bedarf hinzu.")
+                                elif "RTW" in alert_text and not match:
                                     raw_requirements['fahrzeuge'].append(["RTW"])
-                                print(f"    -> Füge {num_rtw}x RTW zum Bedarf hinzu.")
-                            # Fallback, wenn nur "RTW" ohne Zahl dasteht
-                            elif "RTW" in alert_text and not match:
-                                raw_requirements['fahrzeuge'].append(["RTW"])
-                                print("    -> Füge 1x RTW zum Bedarf hinzu.")
+                                    print("    -> Füge 1x RTW zum Bedarf hinzu.")
+
+                        except NoSuchElementException:
+                            pass
 
                     except NoSuchElementException:
-                        # Das ist der Normalfall, wenn keine spezielle Patientenversorgung nötig ist.
-                        pass
-                    # ### ENDE: NEUER BLOCK FÜR PATIENTEN-ANFORDERUNGEN ###
+                            pass
 
                     # Unrentable Einsätze überspringen
                     if mission['timeleft'] > 0 and raw_requirements.get('credits', 0) < MINIMUM_CREDITS:
