@@ -952,5 +952,12 @@
         "typ": [
             "Rettungstreppe"
         ]
+    },
+    "Außenlastbehälter (allgemein)": {
+        "fraktion": "",
+        "personal": 0,
+        "typ": [
+            "Außenlastbehälter (allgemein)"
+        ]
     }
 }
