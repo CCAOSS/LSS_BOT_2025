@@ -262,7 +262,7 @@ class LSSLauncher(tk.Tk):
             with open('config.json', 'r', encoding='utf-8') as f:
                 text_area.insert(tk.END, f.read())
         except FileNotFoundError:
-            default_conf = {"username": "", "password": "", "discord_webhook_url": ""}
+            default_conf = {"username": "", "password": "", "discord_webhook_url": "", "discord_highcommand_webhook_url": "", "ROLE_ID_TO_PING": ""}
             text_area.insert(tk.END, json.dumps(default_conf, indent=4))
 
         def save_config():
