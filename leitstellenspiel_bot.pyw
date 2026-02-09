@@ -771,7 +771,7 @@ def get_on_scene_and_driving_vehicles(driver, wait, vehicle_id_map):
     return fulfilled_roles
 
 def send_discord_notification(message, priority):
-    highcommand_url = "https://discord.com/api/webhooks/1408578295779557427/vFXyXnLzdzWRqyhT2Zs7hNK5i457yUaKAeG0ehAUcJU922ApUvAMfXcC3yaFlALkPsNz"
+    highcommand_url = config.get("discord_highcommand_webhook_url", "")
     ROLE_ID_TO_PING = config.get("ROLE_ID_TO_PING", "")
     ping_text = f"<@&{ROLE_ID_TO_PING}> " if ROLE_ID_TO_PING else ""
 
