@@ -150,7 +150,6 @@ class LSSLauncher(tk.Tk):
         self.log_widget.config(state='disabled')
 
     def check_git_update(self):
-        # Jetzt ist cwd korrekt, also sollte os.path.isdir(".git") funktionieren
         if not shutil.which("git"):
             self.log("Git nicht installiert. Auto-Update deaktiviert.")
             return
@@ -162,15 +161,28 @@ class LSSLauncher(tk.Tk):
 
         self.log("Prüfe auf Updates...")
         try:
-            # git fetch im aktuellen Verzeichnis
             subprocess.run(["git", "fetch"], check=True, capture_output=True, timeout=10)
             status = subprocess.run(["git", "status", "-uno"], capture_output=True, text=True, timeout=5).stdout
             
             if "behind" in status:
                 self.log("Update verfügbar! Lade herunter...")
                 subprocess.run(["git", "pull"], check=True)
-                self.log("Update erfolgreich! Bitte Neustarten.")
-                messagebox.showinfo("Update", "Update installiert. Bitte Launcher neu starten!")
+                
+                # --- NEU: AUTOMATISCHER NEUSTART ---
+                self.log("Update erfolgreich! Starte Launcher neu...")
+                messagebox.showinfo("Update", "Update erfolgreich installiert!\nDer Launcher wird nun automatisch neu gestartet.")
+                
+                # 1. Sicherstellen, dass kein alter Bot-Prozess im Hintergrund weiterläuft
+                self.stop_bot_logic()
+                
+                # 2. Den Launcher (sich selbst) als neuen Prozess starten
+                subprocess.Popen([sys.executable] + sys.argv)
+                
+                # 3. Dieses aktuelle, veraltete Fenster zerstören und beenden
+                self.destroy()
+                sys.exit(0)
+                # -----------------------------------
+                
             else:
                 self.log("Version ist aktuell.")
         except subprocess.TimeoutExpired:
