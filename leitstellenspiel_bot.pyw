@@ -383,19 +383,19 @@ def setup_driver():
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_experimental_option('useAutomationExtension', False)
     
-    try:
-        print("Info: Prüfe und aktualisiere ChromeDriver...")
-        service = ChromeService(ChromeDriverManager().install())
-        
-        # --- HIER WIRD DAS TERMINAL FENSTER VOM DRIVER UNTERDRÜCKT (Windows) ---
-        if sys.platform == "win32":
-            service.creation_flags = 0x08000000  # CREATE_NO_WINDOW
-            
-    except Exception as e:
-        print(f"WARNUNG: Automatisches Update fehlgeschlagen ({e}). Versuche lokalen Treiber...")
-        if sys.platform.startswith('linux'):
-            service = ChromeService(executable_path="/usr/bin/chromedriver")
-        else:
+  # --- Treiber Setup (Unterscheidung zwischen Pi/Linux und Windows) ---
+    if sys.platform.startswith('linux'):
+        print("Info: Linux/Raspberry Pi erkannt. Nutze System-ChromeDriver...")
+        # Auf dem Pi nutzen wir zwingend den über apt installierten Treiber!
+        service = ChromeService(executable_path="/usr/bin/chromedriver")
+    else:
+        try:
+            print("Info: Prüfe und aktualisiere ChromeDriver (Windows/Mac)...")
+            service = ChromeService(ChromeDriverManager().install())
+            if sys.platform == "win32":
+                service.creation_flags = 0x08000000  # CREATE_NO_WINDOW
+        except Exception as e:
+            print(f"WARNUNG: Automatisches Update fehlgeschlagen ({e}). Versuche lokalen Treiber...")
             service = ChromeService(executable_path=resource_path("chromedriver.exe"))
             if sys.platform == "win32":
                 service.creation_flags = 0x08000000
