@@ -794,15 +794,35 @@ def send_discord_notification(message, priority):
 
 def check_and_claim_daily_bonus(driver, wait):
     try:
+        # Finde das Icon
         bonus_icon = driver.find_element(By.XPATH, "//span[contains(@class, 'glyphicon-calendar') and contains(@class, 'bonus-active')]")
-        bonus_icon.click(); time.sleep(2)
+        
+        # NEU: Nutze JavaScript für den Klick. Das ignoriert "verdeckte" oder "nicht sichtbare" Elemente.
+        driver.execute_script("arguments[0].click();", bonus_icon)
+        time.sleep(2)
+        
         wait.until(EC.frame_to_be_available_and_switch_to_it((By.TAG_NAME, "iframe")))
+        
         claim_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "div.collect-possible-block button.collect-button")))
-        claim_button.click(); time.sleep(3)
-    except (NoSuchElementException, TimeoutException): pass
+        
+        # Auch hier zur Sicherheit JavaScript nutzen
+        driver.execute_script("arguments[0].click();", claim_button)
+        time.sleep(3)
+        
+        print("Info: Täglicher Bonus eingesammelt.")
+        
+    except (NoSuchElementException, TimeoutException): 
+        # Bonus nicht verfügbar oder schon eingesammelt - das ist okay!
+        pass
+    except Exception as e:
+        # NEU: Fange JEDEN anderen Fehler ab, damit der Bot wegen des Bonus NICHT abstürzt!
+        print(f"Info: Konnte täglichen Bonus nicht abholen (wird ignoriert): {e}")
     finally:
-        try: driver.switch_to.default_content()
-        except: pass
+        try: 
+            driver.switch_to.default_content()
+        except: 
+            pass
+        
 
 def check_and_claim_tasks(driver, wait):
     """
