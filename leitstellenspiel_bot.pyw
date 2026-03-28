@@ -276,6 +276,13 @@ class ModernApp(ctk.CTk):
                     if 'mission_name' in value: self.val_mission.configure(text=value['mission_name'])
                     if 'requirements' in value: self.val_req.configure(text=value['requirements'])
                     if 'alarm_status' in value: self.val_alarm.configure(text=value['alarm_status'])
+                elif key == 'fatal_error':
+                    # Zeigt die Fehlermeldung als Pop-Up und stoppt danach die GUI
+                    messagebox.showerror(
+                        "Kritischer Bot-Absturz", 
+                        f"Der Bot ist unerwartet abgestürzt!\n\nFehler:\n{value}\n\nEin genauer Bericht wurde in der 'error_log.txt' gespeichert. Das Programm wird nun beendet."
+                    )
+                    self.stop_bot()
 
         except queue.Empty:
             pass
@@ -1158,8 +1165,18 @@ def main_bot_logic(gui_vars):
                 print(f"Fehler im Zyklus: {e}"); traceback.print_exc(); time.sleep(10)
     except Exception as e:
         print("FATALER FEHLER!")
-        if driver: driver.save_screenshot('fehler.png')
-        error_details = traceback.format_exc(); send_discord_notification(f"FATAL ERROR\n```\n{error_details}\n```", "dev")
+        
+        # Sicherheits-Try-Catch, falls der Driver bereits komplett kaputt ist
+        try:
+            if driver: driver.save_screenshot('fehler.png')
+        except:
+            pass
+            
+        error_details = traceback.format_exc()
+        send_discord_notification(f"FATAL ERROR\n```\n{error_details}\n```", "dev")
+        
+        # --- NEU: Sende kurzen Fehlertext an das UI Pop-up ---
+        gui_vars['gui_queue'].put(('fatal_error', str(e)))
         gui_vars['gui_queue'].put(('status', "ABSTURZ! Siehe Log."))
         
         with open(resource_path('error_log.txt'), 'a', encoding='utf-8') as f:
@@ -1173,37 +1190,51 @@ def main_bot_logic(gui_vars):
 # HAUPTPROGRAMM START
 # -----------------------------------------------------------------------------------
 if __name__ == "__main__":
-    gui_queue = queue.Queue()
+    try:
+        gui_queue = queue.Queue()
 
-    pause_event = threading.Event()
-    pause_event.set() 
-    stop_event = threading.Event()
+        pause_event = threading.Event()
+        pause_event.set() 
+        stop_event = threading.Event()
 
-    gui_variables = { 
-        "pause_event": pause_event,
-        "stop_event": stop_event,
-        "db_updated_flag": False,
-        "gui_queue": gui_queue
-    }
+        gui_variables = { 
+            "pause_event": pause_event,
+            "stop_event": stop_event,
+            "db_updated_flag": False,
+            "gui_queue": gui_queue
+        }
 
-    bot_thread = threading.Thread(target=main_bot_logic, args=(gui_variables,))
-    bot_thread.start()
+        bot_thread = threading.Thread(target=main_bot_logic, args=(gui_variables,))
+        bot_thread.start()
 
-    if USE_TERMINAL:
-        terminal = TerminalHandler(pause_event, stop_event, gui_queue)
-        terminal.wait_for_exit()
-        bot_thread.join()
-        print("Bot Prozess beendet.")
-    else:
-        app = ModernApp(pause_event, stop_event, gui_queue)
-        app.mainloop()
+        if USE_TERMINAL:
+            terminal = TerminalHandler(pause_event, stop_event, gui_queue)
+            terminal.wait_for_exit()
+            bot_thread.join()
+            print("Bot Prozess beendet.")
+        else:
+            app = ModernApp(pause_event, stop_event, gui_queue)
+            app.mainloop()
 
-        print("Fenster geschlossen. Warte auf Thread...")
-        bot_thread.join()
+            print("Fenster geschlossen. Warte auf Thread...")
+            bot_thread.join()
 
-        if gui_variables.get("db_updated_flag", False):
-            root = tk.Tk(); root.withdraw()
-            messagebox.showinfo("Update", "Fahrzeug-Datenbank wurde aktualisiert! Bitte JSON prüfen.")
-            root.destroy()
+            if gui_variables.get("db_updated_flag", False):
+                root = tk.Tk(); root.withdraw()
+                messagebox.showinfo("Update", "Fahrzeug-Datenbank wurde aktualisiert! Bitte JSON prüfen.")
+                root.destroy()
+            
+        print("Programm beendet.")
+
+    # --- NEU: Fängt Fehler ab, die auftreten, bevor die GUI richtig existiert ---
+    except Exception as e:
+        error_text = traceback.format_exc()
+        print(f"KRITISCHER STARTFEHLER:\n{error_text}")
+        
+        # Rohes Tkinter Fenster nutzen, um eine Meldung zu erzwingen
+        root = tk.Tk()
+        root.withdraw()
+        messagebox.showerror("Startfehler", f"Das Programm konnte nicht gestartet werden:\n\n{e}\n\nPrüfe das Terminal für mehr Details.")
+        root.destroy()
         
     print("Programm beendet.")
