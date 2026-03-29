@@ -462,18 +462,18 @@
         ],
         "patienten_kapazitaet": 1
     },
-    "MTW TeSi": {
+    "MTW-TeSi": {
         "fraktion": "RD",
         "personal": 2,
         "typ": [
-            "MTW TeSi"
+            "MTW-TeSi"
         ]
     },
-    "GW TeSi": {
+    "GW-TeSi": {
         "fraktion": "RD",
         "personal": 2,
         "typ": [
-            "GW TeSi"
+            "GW-TeSi"
         ]
     },
     "Anh TeSi": {
@@ -958,6 +958,20 @@
         "personal": 0,
         "typ": [
             "Außenlastbehälter (allgemein)"
+        ]
+    },
+    "GW TeSi": {
+        "fraktion": "",
+        "personal": 0,
+        "typ": [
+            "GW TeSi"
+        ]
+    },
+    "MTW TeSi": {
+        "fraktion": "",
+        "personal": 0,
+        "typ": [
+            "MTW TeSi"
         ]
     }
 }

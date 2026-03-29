@@ -34,19 +34,16 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException,
 # KONFIGURATION & SETUP
 # -----------------------------------------------------------------------------------
 
-# UI Design Einstellungen
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
 def resource_path(relative_path):
-    """ Ermittelt den korrekten Pfad zu einer Ressource. """
     try:
         base_path = sys._MEIPASS
     except Exception:
         base_path = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(base_path, relative_path)
 
-# --- Konfiguration laden ---
 try:
     with open(resource_path('config.json'), 'r', encoding='utf-8') as f:
         config = json.load(f)
@@ -58,7 +55,6 @@ except FileNotFoundError:
 except KeyError:
     print("FEHLER: In der 'config.json' fehlen Zugangsdaten."); time.sleep(10); sys.exit()
 
-# --- Fahrzeug-Datenbank laden ---
 def load_vehicle_database(file_path=resource_path("fahrzeug_datenbank.json")):
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
@@ -72,15 +68,14 @@ VEHICLE_DATABASE = load_vehicle_database()
 if not VEHICLE_DATABASE:
     print("Bot wird beendet, da die Fahrzeug-Datenbank nicht geladen werden konnte."); time.sleep(10); sys.exit()
 
-# --- Globale Konstanten ---
-BOT_VERSION = "V1.2.1 - UI Fix"
+BOT_VERSION = "V1.3.0 - DOM-First Parsing"
 PAUSE_IF_NO_VEHICLES_SECONDS = 300
 MAX_START_DELAY_SECONDS = 3600
 MINIMUM_CREDITS = 10000
 ADDED_TO_DATABASE = []
 
 # -----------------------------------------------------------------------------------
-# MODERNES UI (CustomTkinter)
+# MODERNES UI (CustomTkinter) — unverändert
 # -----------------------------------------------------------------------------------
 
 class ModernApp(ctk.CTk):
@@ -90,16 +85,13 @@ class ModernApp(ctk.CTk):
         self.pause_event = pause_event
         self.stop_event = stop_event
 
-        # Fenster Setup
         self.title(f"LSS Bot {BOT_VERSION} | {LEITSTELLENSPIEL_USERNAME}")
-        self.geometry("1000x750") # Etwas höher
+        self.geometry("1000x750")
         self.minsize(800, 600)
 
-        # Layout Grid Config
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
 
-        # --- Sidebar (Links) ---
         self.sidebar_frame = ctk.CTkFrame(self, width=200, corner_radius=0)
         self.sidebar_frame.grid(row=0, column=0, rowspan=4, sticky="nsew")
         self.sidebar_frame.grid_rowconfigure(4, weight=1)
@@ -116,21 +108,18 @@ class ModernApp(ctk.CTk):
         self.stop_button = ctk.CTkButton(self.sidebar_frame, text="Beenden", fg_color="red", hover_color="darkred", command=self.stop_bot)
         self.stop_button.grid(row=3, column=0, padx=20, pady=10)
 
-        # --- Hauptbereich (Tabs) ---
         self.tabview = ctk.CTkTabview(self)
         self.tabview.grid(row=0, column=1, padx=20, pady=20, sticky="nsew")
-        
+
         self.tab_dashboard = self.tabview.add("Live Log")
         self.tab_stats = self.tabview.add("Statistik & Ressourcen")
 
-        # Tab 1: Dashboard (Text Informationen)
         self.tab_dashboard.grid_columnconfigure(0, weight=1)
         self.tab_dashboard.grid_rowconfigure(1, weight=1)
-        
-        # Info Boxen
+
         self.info_frame = ctk.CTkFrame(self.tab_dashboard)
         self.info_frame.grid(row=0, column=0, padx=10, pady=10, sticky="ew")
-        
+
         self.lbl_mission = ctk.CTkLabel(self.info_frame, text="Aktueller Einsatz:", font=ctk.CTkFont(weight="bold"))
         self.lbl_mission.pack(anchor="w", padx=10, pady=(10,0))
         self.val_mission = ctk.CTkLabel(self.info_frame, text="-", wraplength=600, justify="left")
@@ -140,120 +129,78 @@ class ModernApp(ctk.CTk):
         self.lbl_req.pack(anchor="w", padx=10)
         self.val_req = ctk.CTkLabel(self.info_frame, text="-", wraplength=600, justify="left")
         self.val_req.pack(anchor="w", padx=10, pady=(0,10))
-        
+
         self.lbl_alarm = ctk.CTkLabel(self.info_frame, text="Ergebnis:", font=ctk.CTkFont(weight="bold"))
         self.lbl_alarm.pack(anchor="w", padx=10)
         self.val_alarm = ctk.CTkLabel(self.info_frame, text="-", wraplength=600, justify="left")
         self.val_alarm.pack(anchor="w", padx=10, pady=(0,10))
 
-        # Scrollbare Textbox für Logs
         self.log_box = ctk.CTkTextbox(self.tab_dashboard, height=200)
         self.log_box.grid(row=1, column=0, padx=10, pady=10, sticky="nsew")
         self.log_box.insert("0.0", "Warte auf Fahrzeugdaten...\n")
 
-        # --- Tab 2: Statistik (Matplotlib Grafik & Fahrzeugliste) ---
-        # WICHTIG: Grid Konfiguration korrigiert!
         self.tab_stats.grid_columnconfigure(0, weight=1)
-        
-        # Row 0: Chart (Soll nicht wachsen, feste Größe behalten) -> weight=0
-        self.tab_stats.grid_rowconfigure(0, weight=0) 
-        # Row 1: Label (Soll nicht wachsen) -> weight=0
+        self.tab_stats.grid_rowconfigure(0, weight=0)
         self.tab_stats.grid_rowconfigure(1, weight=0)
-        # Row 2: Liste (Soll den ganzen Restplatz bekommen) -> weight=1
         self.tab_stats.grid_rowconfigure(2, weight=1)
 
         self.setup_chart()
-        
-        # Label für die Liste
+
         self.list_label = ctk.CTkLabel(self.tab_stats, text="Detaillierte Fahrzeugliste (Verfügbar)", font=ctk.CTkFont(size=14, weight="bold"))
         self.list_label.grid(row=1, column=0, pady=(5,0), sticky="w", padx=10)
 
-        # Scrollbarer Bereich
         self.vehicle_scroll_frame = ctk.CTkScrollableFrame(self.tab_stats, label_text="Fahrzeuge")
         self.vehicle_scroll_frame.grid(row=2, column=0, padx=10, pady=10, sticky="nsew")
-        
-        # Initialer Text in der Liste
+
         initial_label = ctk.CTkLabel(self.vehicle_scroll_frame, text="Warte auf ersten Scan...")
         initial_label.pack(anchor="w", padx=5, pady=5)
 
-        # Update Loop starten
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
         self.after(100, self.process_queue)
 
     def setup_chart(self):
-        # Erstelle eine Matplotlib Figur (Höhe reduziert von 5 auf 3.5)
         self.figure = Figure(figsize=(5, 3.5), dpi=100)
-        self.figure.patch.set_facecolor('#2b2b2b') # Dunkelgrau
-        
+        self.figure.patch.set_facecolor('#2b2b2b')
         self.ax = self.figure.add_subplot(111)
         self.ax.set_facecolor('#2b2b2b')
-        self.ax.text(0.5, 0.5, 'Warte auf Daten...', 
-                     horizontalalignment='center', verticalalignment='center', color='white')
+        self.ax.text(0.5, 0.5, 'Warte auf Daten...', horizontalalignment='center', verticalalignment='center', color='white')
         self.ax.axis('off')
-
-        # Canvas für Tkinter
         self.canvas = FigureCanvasTkAgg(self.figure, master=self.tab_stats)
         self.canvas.draw()
         self.canvas.get_tk_widget().grid(row=0, column=0, sticky="ew", padx=10, pady=10)
 
     def update_chart(self, data):
-        """Aktualisiert das Diagramm mit neuen Personal-Daten"""
         self.ax.clear()
-        
-        labels = []
-        sizes = []
-        colors = []
-        
-        # Mapping für Farben
+        labels = []; sizes = []; colors = []
         color_map = {'FW': '#ff4d4d', 'RD': '#ffffff', 'POL': '#4dff4d', 'THW': '#4d4dff'}
-        
         for org, count in data.items():
             if count > 0:
-                labels.append(org)
-                sizes.append(count)
-                colors.append(color_map.get(org, '#cccccc'))
-
+                labels.append(org); sizes.append(count); colors.append(color_map.get(org, '#cccccc'))
         if not sizes:
             self.ax.text(0.5, 0.5, 'Keine Einheiten verfügbar', color='white', ha='center')
         else:
-            wedges, texts, autotexts = self.ax.pie(sizes, labels=labels, autopct='%1.1f%%', 
-                                                   colors=colors, startangle=90,
-                                                   textprops={'color':"w"})
+            self.ax.pie(sizes, labels=labels, autopct='%1.1f%%', colors=colors, startangle=90, textprops={'color':"w"})
             self.ax.set_title("Verfügbares Personal (Live)", color='white', pad=10)
-        
         self.figure.tight_layout()
         self.canvas.draw()
 
     def update_vehicle_list_ui(self, vehicle_counts):
-        """Aktualisiert die scrollbare Liste mit Fahrzeugen"""
-        # Alte Widgets entfernen
         for widget in self.vehicle_scroll_frame.winfo_children():
             widget.destroy()
-
         if not vehicle_counts:
             ctk.CTkLabel(self.vehicle_scroll_frame, text="Keine Fahrzeuge verfügbar").pack(anchor="w", padx=5)
             return
-
-        # Sortieren nach Anzahl (absteigend) oder Name
-        sorted_vehicles = sorted(vehicle_counts.items(), key=lambda x: x[0])
-        
-        for name, count in sorted_vehicles:
-            # Container für eine Zeile
+        for name, count in sorted(vehicle_counts.items(), key=lambda x: x[0]):
             row_frame = ctk.CTkFrame(self.vehicle_scroll_frame, fg_color="transparent", height=30)
             row_frame.pack(fill="x", padx=5, pady=2)
-            
-            lbl_name = ctk.CTkLabel(row_frame, text=f"{name}", anchor="w", font=ctk.CTkFont(weight="bold"))
-            lbl_name.pack(side="left", padx=5)
-            
-            lbl_count = ctk.CTkLabel(row_frame, text=f"{count}x", anchor="e", text_color="#aaaaaa")
-            lbl_count.pack(side="right", padx=5)
+            ctk.CTkLabel(row_frame, text=f"{name}", anchor="w", font=ctk.CTkFont(weight="bold")).pack(side="left", padx=5)
+            ctk.CTkLabel(row_frame, text=f"{count}x", anchor="e", text_color="#aaaaaa").pack(side="right", padx=5)
 
     def process_queue(self):
         try:
             while True:
                 message = self.gui_queue.get_nowait()
                 key, value = message
-
                 if key == 'status':
                     self.status_label_sidebar.configure(text=f"Status: {value}")
                 elif key == 'mission_name':
@@ -277,13 +224,8 @@ class ModernApp(ctk.CTk):
                     if 'requirements' in value: self.val_req.configure(text=value['requirements'])
                     if 'alarm_status' in value: self.val_alarm.configure(text=value['alarm_status'])
                 elif key == 'fatal_error':
-                    # Zeigt die Fehlermeldung als Pop-Up und stoppt danach die GUI
-                    messagebox.showerror(
-                        "Kritischer Bot-Absturz", 
-                        f"Der Bot ist unerwartet abgestürzt!\n\nFehler:\n{value}\n\nEin genauer Bericht wurde in der 'error_log.txt' gespeichert. Das Programm wird nun beendet."
-                    )
+                    messagebox.showerror("Kritischer Bot-Absturz", f"Der Bot ist unerwartet abgestürzt!\n\nFehler:\n{value}\n\nEin genauer Bericht wurde in der 'error_log.txt' gespeichert. Das Programm wird nun beendet.")
                     self.stop_bot()
-
         except queue.Empty:
             pass
         finally:
@@ -317,10 +259,8 @@ class TerminalHandler:
         self.stop_event = stop_event
         self.gui_queue = gui_queue
         self.running = True
-        
         self.listener = threading.Thread(target=self.listen_to_queue)
         self.listener.start()
-        
         print("--- HEADLESS MODE GESTARTET ---")
         print("Drücke STRG+C zum Beenden.")
 
@@ -329,25 +269,19 @@ class TerminalHandler:
             try:
                 msg = self.gui_queue.get(timeout=1)
                 key, value = msg
-                
-                if key == 'status':
-                    print(f"[STATUS] {value}")
-                elif key == 'mission_name':
-                    print(f"\n>> EINSATZ: {value}")
-                elif key == 'alarm_status':
-                    print(f"[ALARM] {value}")
-                
+                if key == 'status': print(f"[STATUS] {value}")
+                elif key == 'mission_name': print(f"\n>> EINSATZ: {value}")
+                elif key == 'alarm_status': print(f"[ALARM] {value}")
             except queue.Empty:
                 continue
             except Exception:
                 break
-    
+
     def wait_for_exit(self):
         try:
             while True:
                 time.sleep(1)
-                if self.stop_event.is_set():
-                    break
+                if self.stop_event.is_set(): break
         except KeyboardInterrupt:
             print("\nBeende Bot...")
             self.stop_event.set()
@@ -366,47 +300,262 @@ def setup_driver():
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--blink-settings=imagesEnabled=false")
-    
-    # Stabilitäts-Flags
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-extensions")
 
     user_data_dir = tempfile.mkdtemp()
     chrome_options.add_argument(f"--user-data-dir={user_data_dir}")
-    
+
     if sys.platform.startswith('linux'):
         user_agent = "Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36"
     else:
         user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
-    
+
     chrome_options.add_argument(f'user-agent={user_agent}')
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_experimental_option('useAutomationExtension', False)
-    
-  # --- Treiber Setup (Unterscheidung zwischen Pi/Linux und Windows) ---
+
     if sys.platform.startswith('linux'):
         print("Info: Linux/Raspberry Pi erkannt. Nutze System-ChromeDriver...")
-        # Auf dem Pi nutzen wir zwingend den über apt installierten Treiber!
         service = ChromeService(executable_path="/usr/bin/chromedriver")
     else:
         try:
             print("Info: Prüfe und aktualisiere ChromeDriver (Windows/Mac)...")
             service = ChromeService(ChromeDriverManager().install())
             if sys.platform == "win32":
-                service.creation_flags = 0x08000000  # CREATE_NO_WINDOW
+                service.creation_flags = 0x08000000
         except Exception as e:
             print(f"WARNUNG: Automatisches Update fehlgeschlagen ({e}). Versuche lokalen Treiber...")
             service = ChromeService(executable_path=resource_path("chromedriver.exe"))
             if sys.platform == "win32":
                 service.creation_flags = 0x08000000
-    
+
     driver = webdriver.Chrome(service=service, options=chrome_options)
     driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-    
     return driver
-    
+
+
+# -----------------------------------------------------------------------------------
+# NEU: DOM-FIRST ANFORDERUNGS-PARSER
+# -----------------------------------------------------------------------------------
+
+# Übersetzungs-Map: Wie die Fahrzeuge im HTML heißen → interner Name in der Datenbank
+VEHICLE_NAME_TRANSLATIONS = {
+    "Löschfahrzeuge (LF)": "Löschfahrzeug",
+    "Löschfahrzeuge": "Löschfahrzeug",
+    "Drehleitern": "Drehleiter",
+    "Rettungswagen": "RTW",
+    "Gerätewagen Öl": "GW-Öl",
+    "Feuerwehrkräne (FwK)": "FwK",
+    "Seenotrettungsboote": "Seenotrettungsboot",
+    "Funkstreifenwagen (Dienstgruppenleitung)": "FuStW (DGL)",
+    "Polizeimotorräder": "Motorrad",
+    "Funkstreifenwagen": "FuStW",
+    "Polizeimotorrrad": "Motorrad",
+    "Streifenwagen": "FuStW",
+    # TeSi-Fahrzeuge: Hilfe-Tab liefert Leerzeichen, DB-Typ hat Bindestrich
+    "GW TeSi": "GW-TeSi",
+    "MTW TeSi": "MTW-TeSi",
+    "Anh TeSi": "Anh-TeSi",
+}
+
+def normalize_vehicle_name(raw: str) -> str:
+    """Normalisiert einen Fahrzeugnamen aus dem HTML in den internen DB-Namen."""
+    name = raw.strip()
+    return VEHICLE_NAME_TRANSLATIONS.get(name, name)
+
+
+def parse_missing_block_in_iframe(driver, wait) -> dict:
+    """
+    Liest fehlende Anforderungen aus dem Einsatz-iFrame.
+
+    WICHTIG: Diese Funktion muss aufgerufen werden, NACHDEM der iFrame bereits
+    geöffnet wurde (d.h. der alarm_button ist sichtbar), und NUR wenn der Einsatz
+    als unvollständig erkannt wurde (rote Alert-Box vorhanden).
+
+    Der iFrame-Kontext muss vor dem Aufruf aktiv sein — die Funktion wechselt
+    NICHT selbst in den iFrame, da sie mitten in einem bestehenden iFrame-Kontext
+    aufgerufen wird.
+
+    Gibt ein leeres result-dict zurück wenn nichts gefunden wird.
+    """
+    result = {
+        'fahrzeuge': [],
+        'wasser': 0,
+        'schaummittel': 0,
+        'patienten_rtw': 0,
+        'patienten_nef': 0,
+        'gefangene': 0,
+    }
+
+    # Prüfe ob wir wirklich im iFrame sind — der alarm_button muss existieren
+    # Wenn nicht, sofort abbrechen um keine falschen Daten zu lesen
+    try:
+        driver.find_element(By.XPATH, ".//input[contains(@id, 'alarm_button_')]")
+    except NoSuchElementException:
+        print("Info: parse_missing_block: Kein alarm_button gefunden — kein iFrame-Kontext, überspringe.")
+        return result
+
+    # --- 1. Fehlende Fahrzeuge aus data-requirement-type="vehicles" ---
+    # Diese divs existieren NUR im iFrame wenn der Einsatz unvollständig ist
+    try:
+        vehicle_blocks = driver.find_elements(
+            By.XPATH, ".//div[@data-requirement-type='vehicles']"
+        )
+        for block in vehicle_blocks:
+            text = block.text.strip()
+            if not text:
+                continue
+            # Entferne Label "Fehlende Fahrzeuge:" am Anfang
+            text = re.sub(r'^[^:]+:\s*', '', text).strip()
+
+            # HTML verwendet &nbsp; — Selenium liefert manchmal \xa0 statt Leerzeichen
+            text = text.replace('\xa0', ' ')
+
+            # Splitte an Kommas
+            parts = [p.strip() for p in text.split(',') if p.strip()]
+            for part in parts:
+                count_match = re.match(r'^(\d+)\s+(.+)$', part)
+                count = 1
+                vehicle_text = part
+                if count_match:
+                    count = int(count_match.group(1))
+                    vehicle_text = count_match.group(2).strip()
+
+                # "X oder Y" → Alternativen-Liste
+                alternatives_raw = [v.strip() for v in re.split(r'\s+oder\s+', vehicle_text)]
+                alternatives = [normalize_vehicle_name(v) for v in alternatives_raw if v]
+
+                if alternatives:
+                    for _ in range(count):
+                        result['fahrzeuge'].append(alternatives)
+
+        if result['fahrzeuge']:
+            print(f"Info: DOM (iFrame) meldet {len(result['fahrzeuge'])} fehlende Fahrzeug-Slots.")
+
+    except Exception as e:
+        print(f"Info: Fehler beim Lesen der Fahrzeug-Anforderungen aus iFrame-DOM: {e}")
+
+    # --- 2. Fehlende Ressourcen aus data-requirement-type="other" ---
+    try:
+        other_blocks = driver.find_elements(
+            By.XPATH, ".//div[@data-requirement-type='other']"
+        )
+        for block in other_blocks:
+            text = block.text.replace('\xa0', ' ')
+            wasser_match = re.search(r'(\d[\d.]*)\s*l\.?\s*Wasser', text, re.IGNORECASE)
+            if wasser_match:
+                result['wasser'] += int(wasser_match.group(1).replace('.', ''))
+            schaum_match = re.search(r'(\d[\d.]*)\s*l\.?\s*Schaum', text, re.IGNORECASE)
+            if schaum_match:
+                result['schaummittel'] += int(schaum_match.group(1).replace('.', ''))
+
+        if result['wasser'] > 0:
+            print(f"Info: DOM (iFrame) meldet fehlendes Wasser: {result['wasser']}L")
+        if result['schaummittel'] > 0:
+            print(f"Info: DOM (iFrame) meldet fehlendes Schaummittel: {result['schaummittel']}L")
+
+    except Exception as e:
+        print(f"Info: Fehler beim Lesen der Ressourcen-Anforderungen aus iFrame-DOM: {e}")
+
+    # --- 3. Patienten: Jeder Patient hat eine eigene missing-div im iFrame ---
+    # Format: <div id="patients_missing_XXXXXX" class="alert alert-danger">Wir benötigen: NEF</div>
+    try:
+        patient_missing_divs = driver.find_elements(
+            By.XPATH, ".//div[starts-with(@id, 'patients_missing_') and contains(@class, 'alert-danger')]"
+        )
+        for div in patient_missing_divs:
+            text = div.text.upper().replace('\xa0', ' ')
+            if 'NEF' in text:
+                result['patienten_nef'] += 1
+            if 'RTW' in text or 'KTW' in text:
+                result['patienten_rtw'] += 1
+
+        if result['patienten_nef'] > 0:
+            print(f"Info: DOM (iFrame) meldet {result['patienten_nef']} Patienten brauchen NEF")
+        if result['patienten_rtw'] > 0:
+            print(f"Info: DOM (iFrame) meldet {result['patienten_rtw']} Patienten brauchen RTW/KTW")
+
+    except Exception as e:
+        print(f"Info: Fehler beim Lesen der Patienten-Anforderungen aus iFrame-DOM: {e}")
+
+    # --- 4. Gefangene ---
+    # Suche NUR innerhalb des iFrame-Bereichs, nicht im gesamten Dokument
+    try:
+        prisoner_divs = driver.find_elements(
+            By.XPATH, ".//div[contains(@class, 'alert') and contains(., 'Gefangene sollen abtransportiert')]"
+        )
+        result['gefangene'] = len(prisoner_divs)
+        if result['gefangene'] > 0:
+            print(f"Info: DOM (iFrame) meldet {result['gefangene']} Gefangene zum Abtransport.")
+    except Exception as e:
+        print(f"Info: Fehler beim Lesen der Gefangenen aus iFrame-DOM: {e}")
+
+    return result
+
+
+def merge_requirements(calculated: dict, dom_missing: dict) -> dict:
+    """
+    Zusammenführen von berechneten Anforderungen (aus Hilfe-Tab) und DOM-Ist-Fehlern.
+
+    Strategie für UNVOLLSTÄNDIGE Einsätze (is_incomplete=True):
+    - Fahrzeuge: DOM-Liste ist die einzige Wahrheit (zeigt genau was noch fehlt).
+      Die berechnete Liste enthält ALLE Anforderungen inkl. bereits alarmierter —
+      wir ersetzen sie komplett durch die DOM-Liste.
+    - Wasser/Schaum: DOM-Wert gewinnt (zeigt Ist-Fehlbedarf).
+    - Patienten NEF/RTW: Werden NUR aus DOM hinzugefügt, bestehende RTW-Slots
+      aus der Berechnung werden vorher entfernt.
+    - Gefangene: Nur aus DOM.
+    - Personal: Bleibt aus Berechnung (DOM zeigt kein Personal-Fehlbedarf direkt).
+    """
+    merged = calculated.copy()
+
+    # Fahrzeuge: DOM überschreibt komplett wenn DOM Fahrzeuge liefert
+    if dom_missing['fahrzeuge']:
+        print(f"Info: DOM (iFrame) liefert {len(dom_missing['fahrzeuge'])} fehlende Fahrzeug-Slots → ersetzt Berechnungs-Liste.")
+        merged['fahrzeuge'] = list(dom_missing['fahrzeuge'])
+    else:
+        # DOM leer aber is_incomplete=True: Alle Fahrzeug-Anforderungen wurden erfüllt,
+        # nur noch Ressourcen/Patienten/Gefangene können fehlen
+        merged['fahrzeuge'] = []
+
+    # Wasser/Schaum: DOM-Fehlbedarf gewinnt
+    if dom_missing['wasser'] > 0:
+        merged['wasser'] = dom_missing['wasser']
+    else:
+        merged['wasser'] = 0  # DOM zeigt 0 → kein Wasser mehr nötig
+
+    if dom_missing['schaummittel'] > 0:
+        merged['schaummittel'] = dom_missing['schaummittel']
+    else:
+        merged['schaummittel'] = 0
+
+    # Patienten NEF → als Pflicht-Fahrzeug-Slot hinzufügen
+    if dom_missing['patienten_nef'] > 0:
+        for _ in range(dom_missing['patienten_nef']):
+            merged['fahrzeuge'].append(['NEF'])
+
+    # Patienten RTW → exakt aus DOM, kein Raten
+    if dom_missing['patienten_rtw'] > 0:
+        for _ in range(dom_missing['patienten_rtw']):
+            merged['fahrzeuge'].append(['RTW', 'KTW Typ B'])
+
+    # Patienten-Zähler auf 0 setzen da wir RTW bereits exakt als Slots haben
+    merged['patienten'] = 0
+
+    # Gefangene → Gefangenen-Transport-Slot
+    if dom_missing['gefangene'] > 0:
+        for _ in range(dom_missing['gefangene']):
+            merged['fahrzeuge'].append(['GW-Gefangene', 'Gefangenentransporter', 'GW-Gefangenentr.'])
+
+    return merged
+
+
+# -----------------------------------------------------------------------------------
+# BESTEHENDE FUNKTION: get_mission_requirements (Hilfe-Tab Parser — unverändert)
+# -----------------------------------------------------------------------------------
+
 def get_mission_requirements(driver, wait, player_inventory, given_patients, mission_name, mission_cache):
-    # --- ANPASSBARE ÜBERSETZUNGS-LISTE ---
     translation_map = {
         "Feuerwehrkräne (FwK)": "FwK",
         "Drehleitern": "Drehleiter",
@@ -425,8 +574,8 @@ def get_mission_requirements(driver, wait, player_inventory, given_patients, mis
     }
     try:
         wait.until(EC.frame_to_be_available_and_switch_to_it(iframe_locator))
-        
-        hilfe_button_xpath = "//*[@id='mission_help']" 
+
+        hilfe_button_xpath = "//*[@id='mission_help']"
         hilfe_button = wait.until(EC.element_to_be_clickable((By.XPATH, hilfe_button_xpath)))
         driver.execute_script("arguments[0].click();", hilfe_button)
 
@@ -435,7 +584,7 @@ def get_mission_requirements(driver, wait, player_inventory, given_patients, mis
             credits_text = driver.find_element(By.XPATH, "//td[normalize-space()='Credits im Durchschnitt']/following-sibling::td").text.strip().replace(".", "").replace(",", "")
             if credits_text.isdigit(): credits = int(credits_text)
         except NoSuchElementException: pass
-        
+
         try:
             min_patients_text = driver.find_element(By.XPATH, "//td[normalize-space()='Mindest Patientenanzahl']/following-sibling::td").text.strip()
             if min_patients_text.isdigit(): min_patients = int(min_patients_text)
@@ -453,7 +602,7 @@ def get_mission_requirements(driver, wait, player_inventory, given_patients, mis
             cached_reqs = mission_cache[cache_key].copy()
             cached_reqs['patienten'] = given_patients if given_patients > 0 else min_patients
             return cached_reqs
-        
+
         print(f"Info: Einsatz '{cache_key}' nicht im Cache. Lese Anforderungen neu ein.")
 
         try:
@@ -481,14 +630,14 @@ def get_mission_requirements(driver, wait, player_inventory, given_patients, mis
                     if not player_has_vehicle_of_type(normalized_name, player_inventory, VEHICLE_DATABASE):
                         print(f"      -> Info: Anforderung '{normalized_name}' wird für diesen Einsatz ignoriert (nicht im Inventar).")
                         ignored_optional_types.add(normalized_name)
-            
+
             for row in rows:
                 cells = row.find_elements(By.TAG_NAME, 'td')
                 if len(cells) < 2: continue
                 requirement_text, count_text = cells[0].text.strip(), cells[1].text.strip().replace(" L", "")
                 clean_name = requirement_text.replace("nur angefordert, wenn vorhanden", "").replace("Anforderungswahrscheinlichkeit", "").replace("Benötigte", "").strip()
                 normalized_name = normalize_name(clean_name)
-                
+
                 if normalized_name in ignored_optional_types: continue
                 if "anforderungswahrscheinlichkeit" in requirement_text.lower() or "nur angefordert, wenn vorhanden" in requirement_text.lower(): continue
 
@@ -509,12 +658,11 @@ def get_mission_requirements(driver, wait, player_inventory, given_patients, mis
                     raw_requirements['personal_rd'] += count; continue
                 elif 'feuerwehrleute' in req_lower:
                     raw_requirements['personal_fw'] += count; continue
-                
+
                 if 'betreuungs- und verpflegungsausstattung' in req_lower:
                     ratio_match = re.search(r'pro (\d+)', count_text)
                     if ratio_match:
-                        ratio = int(ratio_match.group(1))
-                        raw_requirements['betreuung_ratio'] = ratio
+                        raw_requirements['betreuung_ratio'] = int(ratio_match.group(1))
                     continue
 
                 req_lower_clean = clean_name.lower()
@@ -535,7 +683,7 @@ def get_mission_requirements(driver, wait, player_inventory, given_patients, mis
                 final_options = [normalize_name(opt) for opt in options_text if opt]
                 if count_text.isdigit() and final_options:
                     for _ in range(int(count_text)): raw_requirements['fahrzeuge'].append(final_options)
-        except TimeoutException: print("Info: No vehicle requirement table found.")
+        except TimeoutException: print("Info: Keine Fahrzeug-Anforderungstabelle gefunden.")
 
         def process_probability_requirement(vehicle_name, probability_text_identifier):
             try:
@@ -544,36 +692,41 @@ def get_mission_requirements(driver, wait, player_inventory, given_patients, mis
                 match = re.search(r'(\d+)', prob_value_cell.text)
                 if not match: return
                 probability = int(match.group(1))
-                if player_has_vehicle_of_type(vehicle_name, player_inventory, VEHICLE_DATABASE):
+                def player_has(t, inv, db):
+                    for n in inv:
+                        if n in db and t in db[n].get("typ", []): return True
+                    return False
+                if player_has(vehicle_name, player_inventory, VEHICLE_DATABASE):
                     if probability > 80: raw_requirements['fahrzeuge'].append([vehicle_name])
                     else: raw_requirements['fahrzeuge_optional'].append([vehicle_name])
             except NoSuchElementException: pass
-        
+
         process_probability_requirement("NEF", "NEF Anforderungswahrscheinlichkeit")
         process_probability_requirement("RTH", "RTH Anforderungswahrscheinlichkeit")
 
         raw_requirements['credits'] = credits
         raw_requirements['patienten'] = given_patients if given_patients > 0 else min_patients
-        
+
         final_reqs_for_cache = raw_requirements.copy()
         final_reqs_for_cache['patienten'] = min_patients
         mission_cache[cache_key] = final_reqs_for_cache
         print(f"      -> Anforderungen für '{cache_key}' zum Cache hinzugefügt.")
 
-    except TimeoutException: 
-        print(f"FEHLER: Der 'Hilfe'-Button mit XPath {hilfe_button_xpath} konnte auch im iFrame nicht gefunden werden.")
+    except TimeoutException:
+        print(f"FEHLER: Der 'Hilfe'-Button konnte nicht gefunden werden.")
         return None
     finally:
-        try: 
+        try:
             wait.until(EC.element_to_be_clickable((By.XPATH, "//a[text()='Zurück' or @class='close' or contains(text(), 'Schließen')]"))).click()
-        except: 
+        except:
             driver.refresh()
     return raw_requirements
+
 
 def get_available_vehicles(driver, wait):
     available_vehicles = []
     vehicle_table_selector = "#vehicle_show_table_all"
-    
+
     try:
         try:
             load_more_button_selector = "//a[contains(@class, 'missing_vehicles_load')]"
@@ -587,18 +740,18 @@ def get_available_vehicles(driver, wait):
 
         vehicle_table = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, vehicle_table_selector)))
         vehicle_rows = vehicle_table.find_elements(By.XPATH, ".//tbody/tr")
-        
+
         for row in vehicle_rows:
             try:
                 checkbox = row.find_element(By.CSS_SELECTOR, "input.vehicle_checkbox")
                 vehicle_type = row.get_attribute('vehicle_type')
-                
+
                 if vehicle_type and vehicle_type in VEHICLE_DATABASE:
                     full_vehicle_name = row.get_attribute('vehicle_caption') or "Unbekannter Name"
                     vehicle_properties = VEHICLE_DATABASE[vehicle_type]
                     available_vehicles.append({
-                        'properties': vehicle_properties, 
-                        'checkbox': checkbox, 
+                        'properties': vehicle_properties,
+                        'checkbox': checkbox,
                         'name': full_vehicle_name,
                         'vehicle_type': vehicle_type
                     })
@@ -606,10 +759,27 @@ def get_available_vehicles(driver, wait):
                 continue
     except TimeoutException:
         print(f"FEHLER: Die Fahrzeug-Tabelle konnte nicht gefunden werden.")
-    
+
     return available_vehicles
 
+
+# -----------------------------------------------------------------------------------
+# FAHRZEUG-KOMBINATIONS-FINDER (KORRIGIERT)
+# -----------------------------------------------------------------------------------
+
 def find_best_vehicle_combination(requirements, available_vehicles, vehicle_data):
+    """
+    Findet die beste Fahrzeugkombination für die gegebenen Anforderungen.
+
+    Kernverbesserung gegenüber der alten Version:
+    - 'fahrzeuge' ist eine Liste von Slots, jeder Slot ist eine Liste von ALTERNATIVEN.
+      Z.B. [['RTW', 'KTW Typ B'], ['NEF'], ['Löschfahrzeug', 'Tanklöschfahrzeug']]
+    - Ein Fahrzeug erfüllt einen Slot, wenn sein 'typ'-Array mindestens einen der
+      Alternativ-Namen enthält (OR-Logik, korrekt implementiert).
+    - Die alte Version versuchte Set-Intersection auf die gesamte Slot-Liste,
+      was bei "RTW oder KTW" korrekt funktioniert, aber bei Personalmangel-Fällen
+      und gemischten Anforderungen zu Fehlern führte.
+    """
     needed_vehicle_options_list = requirements.get('fahrzeuge', []).copy()
     optional_vehicle_options_list = requirements.get('fahrzeuge_optional', []).copy()
     needed_wasser = requirements.get('wasser', 0)
@@ -621,40 +791,58 @@ def find_best_vehicle_combination(requirements, available_vehicles, vehicle_data
     needed_rd = requirements.get('personal_rd', 0)
     needed_pol = requirements.get('personal_pol', 0)
 
-    KTW_B_allowed = patient_bedarf > 5
-    if patient_bedarf >= 5:
-        needed_vehicle_options_list.extend([["KdoW-LNA"], ["GW-San"], ["ELW 1 (SEG)"]])
-    if patient_bedarf >= 10:
-        needed_vehicle_options_list.append(["KdoW-OrgL"])
+    # --- Patienten-Fahrzeuge ---
+    # Nur hinzufügen wenn NICHT schon durch DOM-Parsing ergänzt
+    # (DOM-Parsing liefert exakte RTW-Slots, Berechnung ist nur Fallback)
+    dom_already_set_rtw = any(
+        any(v in ['RTW', 'KTW Typ B'] for v in slot)
+        for slot in needed_vehicle_options_list
+    )
 
-    explicit_rtw_count = sum(1 for options in needed_vehicle_options_list if "RTW" in options)
-    needed_vehicle_options_list = [options for options in needed_vehicle_options_list if "RTW" not in options]
-    rtws_to_add = min(patient_bedarf, 15)
-    final_rtw_bedarf = max(explicit_rtw_count, rtws_to_add)
-    for _ in range(final_rtw_bedarf):
-        needed_vehicle_options_list.append(["RTW", "KTW Typ B"] if KTW_B_allowed else ["RTW"])
+    if not dom_already_set_rtw and patient_bedarf > 0:
+        KTW_B_allowed = patient_bedarf > 5
+        if patient_bedarf >= 5:
+            needed_vehicle_options_list.extend([["KdoW-LNA"], ["GW-San"], ["ELW 1 (SEG)"]])
+        if patient_bedarf >= 10:
+            needed_vehicle_options_list.append(["KdoW-OrgL"])
+
+        explicit_rtw_count = sum(1 for options in needed_vehicle_options_list if "RTW" in options)
+        needed_vehicle_options_list = [
+            options for options in needed_vehicle_options_list
+            if "RTW" not in options
+        ]
+        rtws_to_add = min(patient_bedarf, 15)
+        final_rtw_bedarf = max(explicit_rtw_count, rtws_to_add)
+        for _ in range(final_rtw_bedarf):
+            needed_vehicle_options_list.append(["RTW", "KTW Typ B"] if KTW_B_allowed else ["RTW"])
 
     vehicles_to_send = []
     pool = list(available_vehicles)
     unfulfilled_slots = list(needed_vehicle_options_list)
 
+    # Pflicht-Fahrzeuge zuweisen
     for slot in list(unfulfilled_slots):
         for vehicle in list(pool):
-            vehicle_roles = set(vehicle['properties'].get('typ', []))
-            if not vehicle_roles.isdisjoint(slot):
+            # KORRIGIERT: Prüfe ob das Fahrzeug IRGENDEINEN der Alternativen-Typen erfüllt
+            vehicle_types = set(vehicle['properties'].get('typ', []))
+            slot_types = set(slot)
+            if not vehicle_types.isdisjoint(slot_types):
                 vehicles_to_send.append(vehicle)
                 pool.remove(vehicle)
                 unfulfilled_slots.remove(slot)
-                break 
+                break
 
+    # Optionale Fahrzeuge zuweisen
     for optional_slot in list(optional_vehicle_options_list):
         for vehicle in list(pool):
-            vehicle_roles = set(vehicle['properties'].get('typ', []))
-            if not vehicle_roles.isdisjoint(optional_slot):
+            vehicle_types = set(vehicle['properties'].get('typ', []))
+            slot_types = set(optional_slot)
+            if not vehicle_types.isdisjoint(slot_types):
                 vehicles_to_send.append(vehicle)
                 pool.remove(vehicle)
                 break
 
+    # --- Personal auffüllen ---
     provided_fw = sum(v['properties'].get('personal', 0) for v in vehicles_to_send if v['properties'].get('fraktion') == 'FW')
     provided_thw = sum(v['properties'].get('personal', 0) for v in vehicles_to_send if v['properties'].get('fraktion') == 'THW')
     provided_rd = sum(v['properties'].get('personal', 0) for v in vehicles_to_send if v['properties'].get('fraktion') == 'RD')
@@ -663,27 +851,34 @@ def find_best_vehicle_combination(requirements, available_vehicles, vehicle_data
     def fill_personnel_deficit(needed, provided, fraktion):
         nonlocal pool, vehicles_to_send
         if provided < needed:
-            faction_pool = sorted([v for v in pool if v['properties'].get('fraktion') == fraktion], key=lambda v: v['properties'].get('personal', 0), reverse=True)
+            faction_pool = sorted(
+                [v for v in pool if v['properties'].get('fraktion') == fraktion],
+                key=lambda v: v['properties'].get('personal', 0), reverse=True
+            )
             for vehicle in faction_pool:
                 if provided >= needed: break
                 vehicles_to_send.append(vehicle)
                 pool.remove(vehicle)
                 provided += vehicle['properties'].get('personal', 0)
         return provided
-    
+
     provided_fw = fill_personnel_deficit(needed_fw, provided_fw, 'FW')
     provided_thw = fill_personnel_deficit(needed_thw, provided_thw, 'THW')
     provided_rd = fill_personnel_deficit(needed_rd, provided_rd, 'RD')
     provided_pol = fill_personnel_deficit(needed_pol, provided_pol, 'POL')
 
+    # --- Ressourcen auffüllen ---
     provided_wasser = sum(v['properties'].get('wasser', 0) for v in vehicles_to_send)
     provided_schaummittel = sum(v['properties'].get('schaummittel', 0) for v in vehicles_to_send)
     provided_patienten_kapazitaet = sum(v['properties'].get('patienten_kapazitaet', 0) for v in vehicles_to_send)
-    
+
     def fill_resource_deficit(needed, provided, resource_key):
         nonlocal pool, vehicles_to_send
         if provided < needed:
-            resource_pool = sorted([v for v in pool if v['properties'].get(resource_key, 0) > 0], key=lambda v: v['properties'].get(resource_key, 0), reverse=True)
+            resource_pool = sorted(
+                [v for v in pool if v['properties'].get(resource_key, 0) > 0],
+                key=lambda v: v['properties'].get(resource_key, 0), reverse=True
+            )
             for vehicle in resource_pool:
                 if provided >= needed: break
                 vehicles_to_send.append(vehicle)
@@ -694,27 +889,29 @@ def find_best_vehicle_combination(requirements, available_vehicles, vehicle_data
     fill_resource_deficit(needed_wasser, provided_wasser, 'wasser')
     fill_resource_deficit(needed_schaummittel, provided_schaummittel, 'schaummittel')
     fill_resource_deficit(patient_bedarf, provided_patienten_kapazitaet, 'patienten_kapazitaet')
-    
+
+    # --- Betreuungsausstattung ---
     betreuung_ratio = requirements.get('betreuung_ratio', 0)
     if betreuung_ratio > 0:
         total_personnel = sum(v['properties'].get('personal', 0) for v in vehicles_to_send)
         total_people = total_personnel + patient_bedarf
         units_needed = math.ceil(total_people / betreuung_ratio)
         units_provided = sum(1 for v in vehicles_to_send if "Betreuungsausstattung" in v['properties'].get('typ', []))
-        
         deficit = units_needed - units_provided
         if deficit > 0:
             betreuungs_fahrzeuge = [v for v in pool if "Betreuungsausstattung" in v['properties'].get('typ', [])]
             betreuungs_personal_fahrzeuge = [v for v in pool if "Betreuungsausstattung_Personal" in v['properties'].get('typ', [])]
             for _ in range(deficit):
                 if not betreuungs_fahrzeuge or not betreuungs_personal_fahrzeuge: break
-                vehicle_to_add = betreuungs_fahrzeuge.pop(0)
-                vehicle_to_add_2 = betreuungs_personal_fahrzeuge.pop(0)
-                vehicles_to_send.append(vehicle_to_add)
-                vehicles_to_send.append(vehicle_to_add_2)
-                pool.remove(vehicle_to_add)
-                pool.remove(vehicle_to_add_2)
+                v1 = betreuungs_fahrzeuge.pop(0)
+                v2 = betreuungs_personal_fahrzeuge.pop(0)
+                vehicles_to_send.extend([v1, v2])
+                pool.remove(v1)
+                pool.remove(v2)
 
+    # --- Prüfe ob alle PFLICHT-Anforderungen erfüllt ---
+    # Optionale Fahrzeuge (fahrzeuge_optional) dürfen die Alarmierung NIE blockieren.
+    # unfulfilled_slots enthält nur Pflicht-Slots die nicht erfüllt werden konnten.
     final_provided_fw = sum(v['properties'].get('personal', 0) for v in vehicles_to_send if v['properties'].get('fraktion') == 'FW')
     final_provided_thw = sum(v['properties'].get('personal', 0) for v in vehicles_to_send if v['properties'].get('fraktion') == 'THW')
     final_provided_rd = sum(v['properties'].get('personal', 0) for v in vehicles_to_send if v['properties'].get('fraktion') == 'RD')
@@ -724,7 +921,7 @@ def find_best_vehicle_combination(requirements, available_vehicles, vehicle_data
     final_provided_patienten_kapazitaet = sum(v['properties'].get('patienten_kapazitaet', 0) for v in vehicles_to_send)
 
     all_reqs_met = (
-        not unfulfilled_slots and
+        not unfulfilled_slots and           # Nur Pflicht-Slots zählen hier
         final_provided_fw >= needed_fw and
         final_provided_thw >= needed_thw and
         final_provided_rd >= needed_rd and
@@ -738,8 +935,16 @@ def find_best_vehicle_combination(requirements, available_vehicles, vehicle_data
         print(f"Erfolgreiche Zuteilung gefunden! Sende {len(vehicles_to_send)} Fahrzeuge.")
         return [v['checkbox'] for v in vehicles_to_send]
     else:
+        # Debug-Ausgabe für bessere Fehleranalyse
+        if unfulfilled_slots:
+            print(f"Nicht erfüllte Slots: {unfulfilled_slots}")
+        if final_provided_fw < needed_fw:
+            print(f"FW Personal fehlt: {final_provided_fw}/{needed_fw}")
+        if final_provided_wasser < needed_wasser:
+            print(f"Wasser fehlt: {final_provided_wasser}/{needed_wasser}L")
         print("Keine passende Fahrzeugkombination für die PFLICHT-Anforderungen gefunden.")
         return []
+
 
 def get_on_scene_and_driving_vehicles(driver, wait, vehicle_id_map):
     fulfilled_roles = []
@@ -747,7 +952,6 @@ def get_on_scene_and_driving_vehicles(driver, wait, vehicle_id_map):
 
     try:
         wait.until(EC.frame_to_be_available_and_switch_to_it((By.CSS_SELECTOR, "iframe.lightbox_iframe")))
-
         container_ids = ["mission_vehicle_driving", "mission_vehicle_at_mission"]
         short_wait = WebDriverWait(driver, 5)
 
@@ -756,7 +960,7 @@ def get_on_scene_and_driving_vehicles(driver, wait, vehicle_id_map):
                 css_selector = f"table#{container_id} a[vehicle_type_id]"
                 short_wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, css_selector)))
                 vehicle_links = driver.find_elements(By.CSS_SELECTOR, css_selector)
-                
+
                 for link in vehicle_links:
                     type_id = link.get_attribute('vehicle_type_id')
                     if type_id in vehicle_id_map:
@@ -766,7 +970,6 @@ def get_on_scene_and_driving_vehicles(driver, wait, vehicle_id_map):
                             generic_types = VEHICLE_DATABASE[vehicle_name].get("typ", [])
                             for t in generic_types:
                                 if t != vehicle_name: fulfilled_roles.append(t)
-
             except TimeoutException: pass
 
     except TimeoutException:
@@ -777,70 +980,50 @@ def get_on_scene_and_driving_vehicles(driver, wait, vehicle_id_map):
     print(f"Info: Alarmierte Fahrzeuge erfüllen folgende Rollen: {', '.join(sorted(list(set(fulfilled_roles))))}")
     return fulfilled_roles
 
+
 def send_discord_notification(message, priority):
     highcommand_url = config.get("discord_highcommand_webhook_url", "")
     ROLE_ID_TO_PING = config.get("ROLE_ID_TO_PING", "")
     ping_text = f"<@&{ROLE_ID_TO_PING}> " if ROLE_ID_TO_PING else ""
 
     if "dev" in priority:
-            data = {"content": f"{ping_text} | 🚨 **LSS Bot Alert - User: {LEITSTELLENSPIEL_USERNAME} | {BOT_VERSION} **\n>>> {message}", "allowed_mentions": {"parse": ["roles"]}}
-            try: requests.post(highcommand_url, json=data)
-            except requests.exceptions.RequestException: print("FEHLER: Discord-Benachrichtigung senden fehlgeschlagen.")
+        data = {"content": f"{ping_text} | 🚨 **LSS Bot Alert - User: {LEITSTELLENSPIEL_USERNAME} | {BOT_VERSION} **\n>>> {message}", "allowed_mentions": {"parse": ["roles"]}}
+        try: requests.post(highcommand_url, json=data)
+        except requests.exceptions.RequestException: print("FEHLER: Discord-Benachrichtigung senden fehlgeschlagen.")
 
     if "discord_webhook_url" in config and config["discord_webhook_url"]:
         data = {"content": f"{ping_text} | ℹ️ **LSS Bot Message:**\n>>> {message}", "allowed_mentions": {"parse": ["roles"]}}
         try: requests.post(config["discord_webhook_url"], json=data)
         except requests.exceptions.RequestException: print("FEHLER: Discord-Benachrichtigung senden fehlgeschlagen.")
 
+
 def check_and_claim_daily_bonus(driver, wait):
     try:
-        # Finde das Icon
         bonus_icon = driver.find_element(By.XPATH, "//span[contains(@class, 'glyphicon-calendar') and contains(@class, 'bonus-active')]")
-        
-        # NEU: Nutze JavaScript für den Klick. Das ignoriert "verdeckte" oder "nicht sichtbare" Elemente.
         driver.execute_script("arguments[0].click();", bonus_icon)
         time.sleep(2)
-        
         wait.until(EC.frame_to_be_available_and_switch_to_it((By.TAG_NAME, "iframe")))
-        
         claim_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "div.collect-possible-block button.collect-button")))
-        
-        # Auch hier zur Sicherheit JavaScript nutzen
         driver.execute_script("arguments[0].click();", claim_button)
         time.sleep(3)
-        
         print("Info: Täglicher Bonus eingesammelt.")
-        
-    except (NoSuchElementException, TimeoutException): 
-        # Bonus nicht verfügbar oder schon eingesammelt - das ist okay!
+    except (NoSuchElementException, TimeoutException):
         pass
     except Exception as e:
-        # NEU: Fange JEDEN anderen Fehler ab, damit der Bot wegen des Bonus NICHT abstürzt!
         print(f"Info: Konnte täglichen Bonus nicht abholen (wird ignoriert): {e}")
     finally:
-        try: 
-            driver.switch_to.default_content()
-        except: 
-            pass
-        
+        try: driver.switch_to.default_content()
+        except: pass
+
 
 def check_and_claim_tasks(driver, wait):
-    """
-    Navigiert direkt zur Aufgaben-URL, um UI-Probleme (wie Logout) zu vermeiden.
-    """
     print("Info: Prüfe Aufgaben...")
-    original_url = driver.current_url
     try:
-        # Direktes Ansteuern der Aufgaben-Seite
         driver.get("https://www.leitstellenspiel.de/tasks/index")
         wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
-        
-        # Suche nach Buttons, die "Abholen" oder ähnlich heißen (CSS Klasse btn-success ist meist für fertige Aufgaben)
-        # Suchen nach Buttons innerhalb der Aufgaben-Container
+
         claim_buttons = driver.find_elements(By.XPATH, "//a[contains(@class, 'btn-success') and contains(@href, '/tasks/collect/')]")
-        
         if not claim_buttons:
-             # Manchmal sind es Input-Buttons (Formulare)
             claim_buttons = driver.find_elements(By.XPATH, "//input[contains(@class, 'btn-success') and @value='Abholen']")
 
         clicked_count = 0
@@ -851,16 +1034,16 @@ def check_and_claim_tasks(driver, wait):
                     clicked_count += 1
                     time.sleep(1)
             except Exception: pass
-        
+
         if clicked_count > 0:
             print(f"Info: {clicked_count} Aufgaben-Belohnungen eingesammelt.")
-        
+
     except Exception as e:
         print(f"Warnung bei Aufgaben-Check: {e}")
     finally:
-        # Immer sicherstellen, dass wir zur Hauptseite zurückkehren
         if driver.current_url != "https://www.leitstellenspiel.de/":
             driver.get("https://www.leitstellenspiel.de/")
+
 
 def handle_sprechwunsche(driver, wait):
     navigated_away = False
@@ -874,7 +1057,7 @@ def handle_sprechwunsche(driver, wait):
                     vehicle_link = message.find_element(By.XPATH, ".//a[contains(@href, '/vehicles/')]")
                     vehicle_urls_to_process.append({'url': vehicle_link.get_attribute('href'), 'name': vehicle_link.text.strip()})
                 except NoSuchElementException: continue
-        
+
         if not vehicle_urls_to_process: return
 
         navigated_away = True
@@ -891,12 +1074,13 @@ def handle_sprechwunsche(driver, wait):
     finally:
         if navigated_away: driver.get("https://www.leitstellenspiel.de/")
 
+
 def load_vehicle_id_map(file_path=resource_path("vehicle_id.json")):
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             return json.load(f)
-    except FileNotFoundError: return None
-    except json.JSONDecodeError: return None
+    except (FileNotFoundError, json.JSONDecodeError): return None
+
 
 def save_vehicle_database(database, file_path=resource_path("fahrzeug_datenbank.json")):
     try:
@@ -905,16 +1089,19 @@ def save_vehicle_database(database, file_path=resource_path("fahrzeug_datenbank.
         print("Info: Fahrzeug-Datenbank gespeichert.")
     except Exception as e: print(f"FEHLER: Datenbank speichern fehlgeschlagen: {e}")
 
+
 def load_mission_cache(file_path=resource_path("mission_cache.json")):
     try:
         with open(file_path, 'r', encoding='utf-8') as f: return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError): return {}
+
 
 def save_mission_cache(cache_data, file_path=resource_path("mission_cache.json")):
     try:
         with open(file_path, 'w', encoding='utf-8') as f:
             json.dump(cache_data, f, indent=4, ensure_ascii=False)
     except Exception as e: print(f"FEHLER: Cache speichern fehlgeschlagen: {e}")
+
 
 def get_player_vehicle_inventory(driver, wait):
     print("Info: Lese Fuhrpark ein...")
@@ -931,7 +1118,7 @@ def get_player_vehicle_inventory(driver, wait):
             try:
                 image_tag = row.find_element(By.XPATH, ".//img[@vehicle_type_id]")
                 vehicle_id = image_tag.get_attribute('vehicle_type_id')
-                
+
                 if vehicle_id:
                     vehicle_name = vehicle_id_map.get(vehicle_id)
                     if vehicle_name:
@@ -939,9 +1126,7 @@ def get_player_vehicle_inventory(driver, wait):
                         if vehicle_name not in VEHICLE_DATABASE:
                             print(f"--> NEUES FAHRZEUG: '{vehicle_name}' wird hinzugefügt.")
                             VEHICLE_DATABASE[vehicle_name] = {
-                                "fraktion": "",
-                                "personal": 0,
-                                "typ": [vehicle_name]
+                                "fraktion": "", "personal": 0, "typ": [vehicle_name]
                             }
                             ADDED_TO_DATABASE.append(vehicle_name)
                             database_updated = True
@@ -950,8 +1135,9 @@ def get_player_vehicle_inventory(driver, wait):
     except Exception as e:
         print(f"FEHLER: Konnte den Fuhrpark nicht einlesen: {e}")
         traceback.print_exc()
-            
+
     return inventory, database_updated
+
 
 # -----------------------------------------------------------------------------------
 # HAUPT-THREAD
@@ -959,50 +1145,64 @@ def get_player_vehicle_inventory(driver, wait):
 
 def main_bot_logic(gui_vars):
     driver = None
-    last_check_date = None; bonus_checked_today = False
+    last_check_date = None
+    bonus_checked_today = False
     try:
         mission_cache = load_mission_cache()
-        gui_vars['gui_queue'].put(('status', "Initialisiere...")); driver = setup_driver(); wait = WebDriverWait(driver, 30)
+        gui_vars['gui_queue'].put(('status', "Initialisiere..."))
+        driver = setup_driver()
+        wait = WebDriverWait(driver, 30)
         driver.set_page_load_timeout(45)
 
         vehicle_id_map = load_vehicle_id_map()
 
-        gui_vars['gui_queue'].put(('status', "Logge ein...")); driver.get("https://www.leitstellenspiel.de/users/sign_in")
+        gui_vars['gui_queue'].put(('status', "Logge ein..."))
+        driver.get("https://www.leitstellenspiel.de/users/sign_in")
         wait.until(EC.visibility_of_element_located((By.ID, "user_email"))).send_keys(LEITSTELLENSPIEL_USERNAME)
         driver.find_element(By.ID, "user_password").send_keys(LEITSTELLENSPIEL_PASSWORD)
         time.sleep(1)
         try:
-            login_button = wait.until(EC.element_to_be_clickable((By.NAME, "commit"))); login_button.click()
+            login_button = wait.until(EC.element_to_be_clickable((By.NAME, "commit")))
+            login_button.click()
         except ElementClickInterceptedException:
-            login_button = wait.until(EC.presence_of_element_located((By.NAME, "commit"))); driver.execute_script("arguments[0].click();", login_button)
-        
-        gui_vars['gui_queue'].put(('status', "Warte auf Hauptseite...")); wait.until(EC.presence_of_element_located((By.ID, "missions_outer"))); gui_vars['gui_queue'].put(('status', "Login erfolgreich!"))
+            login_button = wait.until(EC.presence_of_element_located((By.NAME, "commit")))
+            driver.execute_script("arguments[0].click();", login_button)
+
+        gui_vars['gui_queue'].put(('status', "Warte auf Hauptseite..."))
+        wait.until(EC.presence_of_element_located((By.ID, "missions_outer")))
+        gui_vars['gui_queue'].put(('status', "Login erfolgreich!"))
         send_discord_notification(f"Bot gestartet: **{LEITSTELLENSPIEL_USERNAME}**", "user")
-        
+
         player_inventory, gui_vars["db_updated_flag"] = get_player_vehicle_inventory(driver, wait)
         if gui_vars["db_updated_flag"]: save_vehicle_database(VEHICLE_DATABASE)
-        
+
         while True:
             if gui_vars['stop_event'].is_set(): break
             if not gui_vars['pause_event'].is_set():
-                gui_vars['gui_queue'].put(('status', "Bot pausiert...")); gui_vars['pause_event'].wait()
+                gui_vars['gui_queue'].put(('status', "Bot pausiert..."))
+                gui_vars['pause_event'].wait()
 
-            gui_vars['gui_queue'].put(('status', "Prüfe Status...")); driver.get("https://www.leitstellenspiel.de/")
+            gui_vars['gui_queue'].put(('status', "Prüfe Status..."))
+            driver.get("https://www.leitstellenspiel.de/")
             wait.until(EC.presence_of_element_located((By.ID, "missions_outer")), 120)
-            
+
             today = date.today()
-            if last_check_date != today: bonus_checked_today = False; last_check_date = today
+            if last_check_date != today:
+                bonus_checked_today = False
+                last_check_date = today
             if not bonus_checked_today:
                 check_and_claim_daily_bonus(driver, wait)
                 check_and_claim_tasks(driver, wait)
                 bonus_checked_today = True
 
-            try: 
+            try:
                 gui_vars['gui_queue'].put(('status', "Lade Einsatzliste..."))
                 try:
                     wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "#missions_outer .missionSideBarEntry")))
                 except TimeoutException:
-                    gui_vars['gui_queue'].put(('status', f"Keine Einsätze. Warte {30}s...")); time.sleep(30); continue
+                    gui_vars['gui_queue'].put(('status', f"Keine Einsätze. Warte 30s..."))
+                    time.sleep(30)
+                    continue
 
                 mission_list_container = wait.until(EC.presence_of_element_located((By.ID, "missions_outer")))
                 mission_entries = mission_list_container.find_elements(By.XPATH, ".//div[contains(@class, 'missionSideBarEntry')]")
@@ -1010,12 +1210,13 @@ def main_bot_logic(gui_vars):
                 mission_data = []
                 for entry in mission_entries:
                     try:
-                        mission_id = entry.get_attribute('mission_id') 
+                        mission_id = entry.get_attribute('mission_id')
                         url_element = entry.find_element(By.XPATH, ".//a[contains(@id, 'mission_caption_')]")
                         full_name = url_element.text.strip()
                         name = full_name.split(',')[0].strip()
 
-                        patient_count = 0; timeleft = 0
+                        patient_count = 0
+                        timeleft = 0
                         sort_data_str = entry.get_attribute('data-sortable-by')
                         if sort_data_str:
                             sort_data = json.loads(sort_data_str)
@@ -1025,29 +1226,36 @@ def main_bot_logic(gui_vars):
                             timeleft_str = countdown_element.get_attribute('timeleft')
                             if timeleft_str and timeleft_str.isdigit(): timeleft = int(timeleft_str)
                         except NoSuchElementException: pass
-                        
+
                         try:
                             panel_div = entry.find_element(By.XPATH, ".//div[contains(@id, 'mission_panel_')]")
                             panel_class = panel_div.get_attribute('class')
                             is_red = 'mission_panel_red' in panel_class
-                        except NoSuchElementException: is_red = False
+                        except NoSuchElementException:
+                            is_red = False
 
                         if name and mission_id and is_red:
                             mission_data.append({'id': mission_id, 'name': name, 'patienten': patient_count, 'timeleft': timeleft})
                     except (NoSuchElementException, json.JSONDecodeError): continue
-                
+
                 if not mission_data:
-                    gui_vars['gui_queue'].put(('status', f"Keine Einsätze. Warte {30}s...")); time.sleep(30); continue
-                
+                    gui_vars['gui_queue'].put(('status', f"Keine Einsätze. Warte 30s..."))
+                    time.sleep(30)
+                    continue
+
                 gui_vars['gui_queue'].put(('status', f"{len(mission_data)} Einsätze gefunden."))
 
                 for i, mission in enumerate(mission_data):
                     if gui_vars['stop_event'].is_set(): break
-                    if not gui_vars['pause_event'].is_set(): gui_vars['gui_queue'].put(('status' ,"Bot pausiert...")); gui_vars['pause_event'].wait()
+                    if not gui_vars['pause_event'].is_set():
+                        gui_vars['gui_queue'].put(('status', "Bot pausiert..."))
+                        gui_vars['pause_event'].wait()
 
-                    if "[Verband]" in mission['name'] or mission['name'].lower() == "krankentransport" or "intensivverlegung" in mission['name'].lower(): continue
-                    if mission['timeleft'] > MAX_START_DELAY_SECONDS: continue
-                    
+                    if "[Verband]" in mission['name'] or mission['name'].lower() == "krankentransport" or "intensivverlegung" in mission['name'].lower():
+                        continue
+                    if mission['timeleft'] > MAX_START_DELAY_SECONDS:
+                        continue
+
                     print(f"-----------------{mission['name']}-----------------")
                     gui_vars['gui_queue'].put(('mission_name', f"({i+1}/{len(mission_data)}) {mission['name']}"))
 
@@ -1055,35 +1263,71 @@ def main_bot_logic(gui_vars):
                         sidebar_button_xpath = f"//div[@mission_id='{mission['id']}']//a[contains(@class, 'mission-alarm-button')]"
                         element_to_click = wait.until(EC.element_to_be_clickable((By.XPATH, sidebar_button_xpath)))
                         driver.execute_script("arguments[0].click();", element_to_click)
-                        
+
                         main_alarm_button_id = f"alarm_button_{mission['id']}"
                         wait.until(EC.presence_of_element_located((By.ID, main_alarm_button_id)))
 
+                        # ----------------------------------------------------------------
+                        # Schritt 1: iFrame öffnen und prüfen ob Einsatz unvollständig ist
+                        # ----------------------------------------------------------------
+                        dom_missing = None
                         vehicles_on_scene = []
                         is_incomplete = False
+
+                        # Wechsle in den iFrame um den Status zu lesen
                         try:
-                            missing_alert_xpath = "//div[contains(@class, 'alert-danger') and .//div[@data-requirement-type]]"
-                            driver.find_element(By.XPATH, missing_alert_xpath)
+                            wait.until(EC.frame_to_be_available_and_switch_to_it((By.TAG_NAME, "iframe")))
+
+                            # Prüfe ob der rote "Uns fehlt"-Alert vorhanden ist
+                            missing_alert_xpath = ".//div[contains(@class, 'alert-danger') and .//*[@data-requirement-type]]"
+                            try:
+                                driver.find_element(By.XPATH, missing_alert_xpath)
+                                is_incomplete = True
+                                print(f"Info: Einsatz '{mission['name']}' ist UNVOLLSTÄNDIG — lese DOM-Fehlbedarf.")
+
+                                # DOM-Parsing NUR im iFrame und NUR bei unvollständigen Einsätzen
+                                dom_missing = parse_missing_block_in_iframe(driver, wait)
+
+                            except NoSuchElementException:
+                                # Kein Alert → Einsatz frisch, keine Fahrzeuge vor Ort
+                                is_incomplete = False
+                                dom_missing = None
+
+                        except TimeoutException:
+                            print("Info: iFrame konnte nicht geöffnet werden für Status-Prüfung.")
+                        finally:
+                            driver.switch_to.default_content()
+
+                        # Fahrzeuge vor Ort ermitteln (für on-scene Subtraktion) — nur wenn unvollständig
+                        if is_incomplete:
                             vehicles_on_scene = get_on_scene_and_driving_vehicles(driver, wait, vehicle_id_map)
-                            is_incomplete = True
-                        except NoSuchElementException: pass
-                        
-                        raw_requirements = get_mission_requirements(driver, wait, player_inventory, mission['patienten'], mission['name'], mission_cache)
-                        if not raw_requirements: continue
 
-                        try:
-                            patient_alert_xpath = "//div[starts-with(@id, 'patients_missing_')]"
-                            patient_alert = driver.find_element(By.XPATH, patient_alert_xpath)
-                            alert_text = patient_alert.text
-                            if "NEF" in alert_text: raw_requirements['fahrzeuge'].append(["NEF"])
-                            if "RTW" in alert_text: raw_requirements['fahrzeuge'].append(["RTW"])
-                        except NoSuchElementException: pass
-                    except NoSuchElementException: pass
+                        # ----------------------------------------------------------------
+                        # Schritt 2: Hilfe-Tab Anforderungen lesen (öffnet eigenen iFrame)
+                        # ----------------------------------------------------------------
+                        raw_requirements = get_mission_requirements(
+                            driver, wait, player_inventory, mission['patienten'], mission['name'], mission_cache
+                        )
+                        if not raw_requirements:
+                            continue
 
-                    if mission['timeleft'] > 0 and raw_requirements.get('credits', 0) < MINIMUM_CREDITS: continue
-                    
+                        # ----------------------------------------------------------------
+                        # Schritt 3: DOM-Fehlbedarf einmergen — NUR bei unvollständigen Einsätzen
+                        # ----------------------------------------------------------------
+                        if is_incomplete and dom_missing:
+                            raw_requirements = merge_requirements(raw_requirements, dom_missing)
+
+                    except NoSuchElementException:
+                        pass
+
+                    if mission['timeleft'] > 0 and raw_requirements.get('credits', 0) < MINIMUM_CREDITS:
+                        continue
+
                     if is_incomplete and vehicles_on_scene:
-                        provided_by_on_scene = {'personal_fw': 0, 'personal_thw': 0, 'personal_rd': 0, 'personal_pol': 0, 'wasser': 0, 'schaummittel': 0, 'patienten_kapazitaet': 0}
+                        provided_by_on_scene = {
+                            'personal_fw': 0, 'personal_thw': 0, 'personal_rd': 0, 'personal_pol': 0,
+                            'wasser': 0, 'schaummittel': 0, 'patienten_kapazitaet': 0
+                        }
                         for vehicle_type in vehicles_on_scene:
                             if vehicle_type in VEHICLE_DATABASE:
                                 props = VEHICLE_DATABASE[vehicle_type]
@@ -1094,20 +1338,26 @@ def main_bot_logic(gui_vars):
                                 elif fraktion == 'POL': provided_by_on_scene['personal_pol'] += props.get('personal', 0)
                                 provided_by_on_scene['wasser'] += props.get('wasser', 0)
                                 provided_by_on_scene['schaummittel'] += props.get('schaummittel', 0)
-                                provided_by_on_scene['patienten_kapazitaet'] += props.get('patienten_kapazitaet', 0)                        
+                                provided_by_on_scene['patienten_kapazitaet'] += props.get('patienten_kapazitaet', 0)
 
-                        on_scene_counts = Counter(vehicles_on_scene)
-                        still_needed_requirements = []
-                        for required_options in raw_requirements['fahrzeuge']:
-                            found_match_on_scene = False
-                            for option in required_options:
-                                if on_scene_counts[option] > 0:
-                                    on_scene_counts[option] -= 1
-                                    found_match_on_scene = True
-                                    break
-                            if not found_match_on_scene: still_needed_requirements.append(required_options)
+                        # Wenn DOM bereits fehlende Fahrzeuge geliefert hat,
+                        # enthält raw_requirements['fahrzeuge'] NUR noch tatsächlich fehlende Slots.
+                        # Die on_scene Subtraktion ist dann doppelt — nur ausführen wenn DOM keine Fahrzeuge lieferte.
+                        dom_has_vehicles = dom_missing and dom_missing.get('fahrzeuge')
+                        if not dom_has_vehicles:
+                            on_scene_counts = Counter(vehicles_on_scene)
+                            still_needed_requirements = []
+                            for required_options in raw_requirements['fahrzeuge']:
+                                found_match_on_scene = False
+                                for option in required_options:
+                                    if on_scene_counts[option] > 0:
+                                        on_scene_counts[option] -= 1
+                                        found_match_on_scene = True
+                                        break
+                                if not found_match_on_scene:
+                                    still_needed_requirements.append(required_options)
+                            raw_requirements['fahrzeuge'] = still_needed_requirements
 
-                        raw_requirements['fahrzeuge'] = still_needed_requirements
                         raw_requirements['personal_fw'] = max(0, raw_requirements.get('personal_fw', 0) - provided_by_on_scene['personal_fw'])
                         raw_requirements['personal_thw'] = max(0, raw_requirements.get('personal_thw', 0) - provided_by_on_scene['personal_thw'])
                         raw_requirements['personal_rd'] = max(0, raw_requirements.get('personal_rd', 0) - provided_by_on_scene['personal_rd'])
@@ -1115,13 +1365,20 @@ def main_bot_logic(gui_vars):
                         raw_requirements['wasser'] = max(0, raw_requirements.get('wasser', 0) - provided_by_on_scene['wasser'])
                         raw_requirements['schaummittel'] = max(0, raw_requirements.get('schaummittel', 0) - provided_by_on_scene['schaummittel'])
                         raw_requirements['patienten'] = max(0, raw_requirements.get('patienten', 0) - provided_by_on_scene['patienten_kapazitaet'])
-                    
+
                     final_requirements = raw_requirements
-                    req_parts = []; readable_requirements = [" oder ".join(options) for options in final_requirements['fahrzeuge']]
+                    req_parts = []
+                    readable_requirements = [" oder ".join(options) for options in final_requirements['fahrzeuge']]
                     vehicle_counts = Counter(readable_requirements)
-                    for vehicle, count in vehicle_counts.items(): req_parts.append(f"{count}x {vehicle}")
-                    if final_requirements.get('personal_fw', 0) > 0: req_parts.append(f"{final_requirements['personal_fw']} FW")
-                    
+                    for vehicle, count in vehicle_counts.items():
+                        req_parts.append(f"{count}x {vehicle}")
+                    if final_requirements.get('personal_fw', 0) > 0:
+                        req_parts.append(f"{final_requirements['personal_fw']} FW")
+                    if final_requirements.get('wasser', 0) > 0:
+                        req_parts.append(f"{final_requirements['wasser']}L Wasser")
+                    if final_requirements.get('schaummittel', 0) > 0:
+                        req_parts.append(f"{final_requirements['schaummittel']}L Schaum")
+
                     req_string = ", ".join(req_parts) if req_parts else "Nichts mehr benötigt."
                     gui_vars['gui_queue'].put(('requirements', req_string))
 
@@ -1129,50 +1386,58 @@ def main_bot_logic(gui_vars):
                     if not available_vehicles:
                         gui_vars['gui_queue'].put(('availability_text', "Keine Fahrzeuge frei."))
                         gui_vars['gui_queue'].put(('status', f"Keine Fahrzeuge. Pausiere {PAUSE_IF_NO_VEHICLES_SECONDS}s..."))
-                        time.sleep(PAUSE_IF_NO_VEHICLES_SECONDS); break
-                    
-                    # --- GRAFIK DATEN SENDEN ---
+                        time.sleep(PAUSE_IF_NO_VEHICLES_SECONDS)
+                        break
+
                     specific_types = [v['vehicle_type'] for v in available_vehicles]
                     available_counts = Counter(specific_types)
-                    
-                    # Neue Daten für die Liste senden
                     gui_vars['gui_queue'].put(('vehicle_list_data', available_counts))
 
                     vehicle_parts = [f"{count}x {v_type}" for v_type, count in available_counts.items()]
                     vehicle_str = "Fahrzeuge: " + (", ".join(vehicle_parts) if vehicle_parts else "Keine")
-                    
+
                     personnel_counts = {'FW': 0, 'THW': 0, 'RD': 0, 'POL': 0}
-                    total_water = 0; total_foam = 0
+                    total_water = 0
+                    total_foam = 0
                     for v in available_vehicles:
-                        props = v.get('properties', {}); total_water += props.get('wasser', 0); total_foam += props.get('schaummittel', 0)
+                        props = v.get('properties', {})
+                        total_water += props.get('wasser', 0)
+                        total_foam += props.get('schaummittel', 0)
                         fraktion = props.get('fraktion')
-                        if fraktion in personnel_counts: personnel_counts[fraktion] += props.get('personal', 0)
-                    
-                    # Sende Daten für Tortendiagramm
+                        if fraktion in personnel_counts:
+                            personnel_counts[fraktion] += props.get('personal', 0)
+
                     gui_vars['gui_queue'].put(('stats_data', personnel_counts))
-                    
-                    personnel_str = (f"Personal: {personnel_counts['FW']} FW, {personnel_counts['THW']} THW, {personnel_counts['RD']} RD, {personnel_counts['POL']} POL")
+
+                    personnel_str = f"Personal: {personnel_counts['FW']} FW, {personnel_counts['THW']} THW, {personnel_counts['RD']} RD, {personnel_counts['POL']} POL"
                     resources_str = f"Ressourcen: {total_water}L Wasser, {total_foam}L Schaum"
                     gui_vars['gui_queue'].put(('availability_text', f"{vehicle_str}\n\n{personnel_str}\n{resources_str}"))
 
                     checkboxes_to_click = find_best_vehicle_combination(final_requirements, available_vehicles, VEHICLE_DATABASE)
                     if checkboxes_to_click:
-                        gui_vars['gui_queue'].put(('status', "✓ Alarmiere...")); gui_vars['gui_queue'].put(('alarm_status', f"OK: {len(checkboxes_to_click)} Fahrzeuge"))
-                        for checkbox in checkboxes_to_click: driver.execute_script("arguments[0].click();", checkbox)
+                        gui_vars['gui_queue'].put(('status', "✓ Alarmiere..."))
+                        gui_vars['gui_queue'].put(('alarm_status', f"OK: {len(checkboxes_to_click)} Fahrzeuge"))
+                        for checkbox in checkboxes_to_click:
+                            driver.execute_script("arguments[0].click();", checkbox)
                         try:
-                            alarm_button = driver.find_element(By.XPATH, "//input[@value='Alarmieren und zum nächsten Einsatz']"); driver.execute_script("arguments[0].click();", alarm_button)
+                            alarm_button = driver.find_element(By.XPATH, "//input[@value='Alarmieren und zum nächsten Einsatz']")
+                            driver.execute_script("arguments[0].click();", alarm_button)
                         except NoSuchElementException:
-                            alarm_button = driver.find_element(By.XPATH, "//input[@value='Alarmieren']"); driver.execute_script("arguments[0].click();", alarm_button)
+                            alarm_button = driver.find_element(By.XPATH, "//input[@value='Alarmieren']")
+                            driver.execute_script("arguments[0].click();", alarm_button)
                     else:
-                        gui_vars['gui_queue'].put(('status', "❌ Nicht genug Einheiten.")); gui_vars['gui_queue'].put(('alarm_status', "FEHLT: Einheiten"))
+                        gui_vars['gui_queue'].put(('status', "❌ Nicht genug Einheiten."))
+                        gui_vars['gui_queue'].put(('alarm_status', "FEHLT: Einheiten"))
 
-                    short_wait = WebDriverWait(driver, 3) 
+                    short_wait = WebDriverWait(driver, 3)
                     try:
                         short_wait.until(EC.frame_to_be_available_and_switch_to_it((By.TAG_NAME, "iframe")))
                         close_button_xpath = "//*[@id='lightbox_close_inside']"
                         short_wait.until(EC.element_to_be_clickable((By.XPATH, close_button_xpath))).click()
-                    except TimeoutException: pass
-                    finally: driver.switch_to.default_content()
+                    except TimeoutException:
+                        pass
+                    finally:
+                        driver.switch_to.default_content()
 
                     wait.until(EC.visibility_of_element_located((By.ID, "missions_outer")))
 
@@ -1182,29 +1447,30 @@ def main_bot_logic(gui_vars):
                     handle_sprechwunsche(driver, wait)
 
             except Exception as e:
-                print(f"Fehler im Zyklus: {e}"); traceback.print_exc(); time.sleep(10)
+                print(f"Fehler im Zyklus: {e}")
+                traceback.print_exc()
+                time.sleep(10)
     except Exception as e:
         print("FATALER FEHLER!")
-        
-        # Sicherheits-Try-Catch, falls der Driver bereits komplett kaputt ist
         try:
             if driver: driver.save_screenshot('fehler.png')
         except:
             pass
-            
+
         error_details = traceback.format_exc()
         send_discord_notification(f"FATAL ERROR\n```\n{error_details}\n```", "dev")
-        
-        # --- NEU: Sende kurzen Fehlertext an das UI Pop-up ---
         gui_vars['gui_queue'].put(('fatal_error', str(e)))
         gui_vars['gui_queue'].put(('status', "ABSTURZ! Siehe Log."))
-        
+
         with open(resource_path('error_log.txt'), 'a', encoding='utf-8') as f:
-            f.write(f"\n--- FEHLER am {time.strftime('%Y-%m-%d %H:%M:%S')} ---\n"); f.write(error_details); f.write("-" * 50 + "\n")
+            f.write(f"\n--- FEHLER am {time.strftime('%Y-%m-%d %H:%M:%S')} ---\n")
+            f.write(error_details)
+            f.write("-" * 50 + "\n")
     finally:
         if mission_cache: save_mission_cache(mission_cache)
         if driver: driver.quit()
         gui_vars['gui_queue'].put(('status', "Bot beendet."))
+
 
 # -----------------------------------------------------------------------------------
 # HAUPTPROGRAMM START
@@ -1212,12 +1478,11 @@ def main_bot_logic(gui_vars):
 if __name__ == "__main__":
     try:
         gui_queue = queue.Queue()
-
         pause_event = threading.Event()
-        pause_event.set() 
+        pause_event.set()
         stop_event = threading.Event()
 
-        gui_variables = { 
+        gui_variables = {
             "pause_event": pause_event,
             "stop_event": stop_event,
             "db_updated_flag": False,
@@ -1240,21 +1505,19 @@ if __name__ == "__main__":
             bot_thread.join()
 
             if gui_variables.get("db_updated_flag", False):
-                root = tk.Tk(); root.withdraw()
+                root = tk.Tk()
+                root.withdraw()
                 messagebox.showinfo("Update", "Fahrzeug-Datenbank wurde aktualisiert! Bitte JSON prüfen.")
                 root.destroy()
-            
+
         print("Programm beendet.")
 
-    # --- NEU: Fängt Fehler ab, die auftreten, bevor die GUI richtig existiert ---
     except Exception as e:
         error_text = traceback.format_exc()
         print(f"KRITISCHER STARTFEHLER:\n{error_text}")
-        
-        # Rohes Tkinter Fenster nutzen, um eine Meldung zu erzwingen
         root = tk.Tk()
         root.withdraw()
         messagebox.showerror("Startfehler", f"Das Programm konnte nicht gestartet werden:\n\n{e}\n\nPrüfe das Terminal für mehr Details.")
         root.destroy()
-        
+
     print("Programm beendet.")
