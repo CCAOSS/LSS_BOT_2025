@@ -352,7 +352,11 @@ class TerminalHandler:
 
 def setup_driver():
     chrome_options = Options()
-    ##chrome_options.add_argument("--headless")
+    
+    # Auf Linux (Raspberry Pi) oder im Terminal-Modus Headless aktivieren
+    if sys.platform.startswith('linux') or USE_TERMINAL:
+        chrome_options.add_argument("--headless=new")
+        
     chrome_options.add_argument("--window-size=1920,1080")
     chrome_options.add_argument("--mute-audio")
     chrome_options.add_argument("--log-level=3")
@@ -360,7 +364,7 @@ def setup_driver():
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--blink-settings=imagesEnabled=false")
     
-    # Stabilitäts-Flags
+    # Stabilitäts-Flags (besonders wichtig auf dem Raspberry Pi!)
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-extensions")
 
@@ -368,7 +372,7 @@ def setup_driver():
     chrome_options.add_argument(f"--user-data-dir={user_data_dir}")
     
     if sys.platform.startswith('linux'):
-        user_agent = "Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36"
+        user_agent = "Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
     else:
         user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
     
@@ -376,19 +380,26 @@ def setup_driver():
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_experimental_option('useAutomationExtension', False)
     
-    try:
-        print("Info: Prüfe und aktualisiere ChromeDriver...")
-        service = ChromeService(ChromeDriverManager().install())
-        
-        # --- HIER WIRD DAS TERMINAL FENSTER VOM DRIVER UNTERDRÜCKT (Windows) ---
-        if sys.platform == "win32":
-            service.creation_flags = 0x08000000  # CREATE_NO_WINDOW
-            
-    except Exception as e:
-        print(f"WARNUNG: Automatisches Update fehlgeschlagen ({e}). Versuche lokalen Treiber...")
-        if sys.platform.startswith('linux'):
-            service = ChromeService(executable_path="/usr/bin/chromedriver")
-        else:
+    # --- TREIBER-AUSWAHL: Linux (Raspberry Pi) vs. Windows ---
+    if sys.platform.startswith('linux'):
+        print("Info: Linux/Raspberry Pi erkannt -> Nutze ARM System-ChromeDriver...")
+        # Prüfe die typischen Installationspfade unter Debian / Raspberry Pi OS
+        possible_paths = [
+            "/usr/bin/chromedriver",
+            "/usr/lib/chromium-browser/chromedriver",
+            "/usr/lib/chromium/chromedriver"
+        ]
+        driver_path = next((p for p in possible_paths if os.path.exists(p)), "/usr/bin/chromedriver")
+        service = ChromeService(executable_path=driver_path)
+    else:
+        # Windows: Nutze weiterhin den automatischen ChromeDriverManager
+        try:
+            print("Info: Prüfe und aktualisiere ChromeDriver (Windows)...")
+            service = ChromeService(ChromeDriverManager().install())
+            if sys.platform == "win32":
+                service.creation_flags = 0x08000000  # CREATE_NO_WINDOW
+        except Exception as e:
+            print(f"WARNUNG: Automatisches Update fehlgeschlagen ({e}). Versuche lokalen Treiber...")
             service = ChromeService(executable_path=resource_path("chromedriver.exe"))
             if sys.platform == "win32":
                 service.creation_flags = 0x08000000
